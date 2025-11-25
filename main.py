@@ -3,6 +3,8 @@ from utils import query, map_student_course, recommed_module
 import json
 import time
 import os
+from openai import OpenAI
+
 # 创建flask对象
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'gsolvit'
@@ -348,6 +350,40 @@ def submit_train_place():
     train_plan_str = train_plan_str.replace("yellow", "green")
     train_plan = json.loads(train_plan_str)
     return jsonify(train_plan)
+
+
+@app.route('/api/deepseek_chat', methods=['POST'])
+def deepseek_chat():
+    user_message = request.json.get("message", "")
+
+    if not user_message:
+        return jsonify({"error": "消息不能为空"}), 400
+
+    # 读取 DeepSeek API KEY（你必须提前设置环境变量）
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        return jsonify({"error": "未检测到 DEEPSEEK_API_KEY"}), 500
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.deepseek.com"
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "你是一个课程学习助手，回答简明清晰。"},
+                {"role": "user", "content": user_message}
+            ],
+            stream=False
+        )
+
+        reply = response.choices[0].message.content
+        return jsonify({"reply": reply})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
