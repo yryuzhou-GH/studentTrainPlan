@@ -10,6 +10,6 @@ class Config:
 
 config = {
     'default': Config,
-    'MYSQL_PASSWORD': '3057681893qwe',
-    'DATABASE_NAME': 'studentTrainPlan'
+    'MYSQL_PASSWORD': '200502',
+    'DATABASE_NAME': 'studenttrainplan'
 }
