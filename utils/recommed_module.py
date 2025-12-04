@@ -111,34 +111,86 @@ def recommedCoursePerson(dataMat, user, N=7, simMeas=ecludSim, estMethod=svdMeth
 
 def toBarJson(data, dict2id):
     """
-
-    :param data: [(0, 5.0), (1, 5.0), (2, 5.0)]
-    :return::
-    {
+    将推荐结果转换为前端图表需要的JSON格式（兼容新系统格式）
+    
+    :param data: [(0, 5.0), (1, 5.0), (2, 5.0)] - (id, score) 元组列表
+    :param dict2id: {0: "课程名", 1: "课程名"} - ID到名称的映射
+    :return: {
         "source": [
+            ["amount", "product"],  # 列名行（ECharts dataset必需）
             [2.3, "计算机视觉"],
             [1.1, "自然语言处理"],
-            [2.4, "高等数学"],
-            [3.1, "线性代数"],
-            [4.7, "计算机网络"],
-            [5.1, "离散数学"]
+            ...
         ]
      }
     """
-    jsonData = {"source":[]}
+    jsonData = {"source": []}
+    # 添加列名行（ECharts dataset格式要求）
+    jsonData['source'].append(["amount", "product"])
+    
+    # 添加数据行
     for each in data:
-        unit = [each[1], dict2id[each[0]]]
-        jsonData['source'].append(unit)
+        item_id = each[0]  # ID
+        score = each[1]    # 评分或相似度
+        if item_id in dict2id:
+            unit = [score, dict2id[item_id]]
+            jsonData['source'].append(unit)
     return jsonData
 
 def regularData(data, a, b):
     """
-    功能，将列表的值归一化到[a,b]之间
+    功能：将列表的值归一化到[a,b]之间
+    注意：第一行是列名 ["amount", "product"]，需要跳过
     """
-    dataNum = [i[0] for i in data['source']]
+    # 检查数据是否为空或只有列名
+    if not data['source'] or len(data['source']) <= 1:
+        return data
+    
+    # 跳过第一行列名，只处理数据行
+    data_rows = data['source'][1:]
+    if not data_rows:
+        return data
+    
+    # 提取数值（每行的第一个元素）
+    dataNum = []
+    for row in data_rows:
+        try:
+            val = float(row[0])
+            dataNum.append(val)
+        except (ValueError, TypeError):
+            continue
+    
+    if not dataNum:
+        return data
+    
+    # 计算最大值和最小值
     Max, Min = max(dataNum), min(dataNum)
-    k = (b-a)/(Max-Min)
-    dataRg = [a+ k*(i-Min) for i in dataNum]
-    for idx,each in enumerate(data['source']):
-        each[0] = dataRg[idx]
+    
+    # 如果所有值相同，设置为中间值
+    if Max == Min:
+        mid_value = (a + b) / 2
+        for row in data_rows:
+            try:
+                float(row[0])  # 确认是数字
+                row[0] = mid_value
+            except (ValueError, TypeError):
+                continue
+        return data
+    
+    # 计算归一化系数
+    k = (b - a) / (Max - Min)
+    
+    # 归一化
+    dataRg = [a + k * (i - Min) for i in dataNum]
+    
+    # 更新数据行的值
+    rg_idx = 0
+    for row in data_rows:
+        try:
+            float(row[0])  # 确认是数字
+            row[0] = dataRg[rg_idx]
+            rg_idx += 1
+        except (ValueError, TypeError):
+            continue
+    
     return data

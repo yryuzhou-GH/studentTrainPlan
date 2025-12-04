@@ -46,11 +46,15 @@ def update(sql):
         db.commit()
         #print('update success')
         # print('update success')
-    except:
+    except Exception as e:
         # print('update loss')
+        print(f"数据库更新错误: {str(e)}")
+        print(f"SQL语句: {sql}")
         db.rollback()
-    cur.close()
-    db.close()
+        raise  # 重新抛出异常，让调用者知道错误
+    finally:
+        cur.close()
+        db.close()
 
 def getPlanTreeJson(stu_id):
     """

@@ -79,6 +79,17 @@ a:active, a:focus {
 .logo_box{ display:block;
 	margin-top:20px;
 	float:left;}
+.logo_box img{
+	height:76px;
+	width:auto;
+	display:block;
+	object-fit:contain;
+}
+.header_box2:after{
+	content:"";
+	display:block;
+	clear:both;
+}
 .nav_box{ width:902px;
 	height:116px;
 	float:left;

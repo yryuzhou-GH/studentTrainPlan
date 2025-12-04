@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专业选修课程选课</title>
+    <link href="{{ url_for('static', filename='css/style1.css') }}" rel="stylesheet" type="text/css" />
+    <script src="{{ url_for('static', filename='js/jquery-2.2.4.min.js') }}" type="text/javascript"></script>
+    <style>
+        .selection-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #333;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .course-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .course-table th,
+        .course-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .course-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        .course-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .btn-select {
+            background-color: #27ae60;
+            color: white;
+        }
+        .btn-select:hover {
+            background-color: #229954;
+        }
+        .btn-drop {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .btn-drop:hover {
+            background-color: #c0392b;
+        }
+        .btn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .empty-message {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="wapper_box">
+        <div class="header_box"></div>
+        <div class="header_box1">
+            <div class="header_box2">
+                <a class="logo_box" href="{{ url_for('index') }}">
+                    <img src="{{ url_for('static', filename='images/logo1.jpg') }}"/>
+                </a>
+                <ul class="nav_box">
+                    <li class="nav_1"><a class="nav_but" href="{{ url_for('personal_information') }}">个人中心</a></li>
+                    <li class="nav_1"><a class="nav_but" href="{{ url_for('news_center') }}">课程论坛</a></li>
+                    <li class="nav_1"><a class="nav_but" href="{{ url_for('recommed') }}">课程推荐</a></li>
+                    <li class="nav_1"><a class="nav_but" href="{{ url_for('course_selection') }}">选课中心</a></li>
+                    <li class="nav_1"><a class="nav_but" href="{{ url_for('train_plan') }}">课程进度</a></li>
+                    <li class="nav_1"><a class="nav_but" href="{{ url_for('index') }}">首页</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="selection-container">
+        <h1 style="text-align: center; color: #333; margin-bottom: 30px;">专业选修课程选课系统</h1>
+        
+        <!-- 消息提示 -->
+        <div id="message" class="message"></div>
+
+        <!-- 已选课程 -->
+        <div class="section">
+            <h2>已选课程 ({{ chosen_courses|length }})</h2>
+            {% if chosen_courses %}
+            <table class="course-table">
+                <thead>
+                    <tr>
+                        <th>课程编号</th>
+                        <th>课程名称</th>
+                        <th>课程类型</th>
+                        <th>学分</th>
+                        <th>任课教师</th>
+                        <th>成绩</th>
+                        <th>评价</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for course in chosen_courses %}
+                    <tr>
+                        <td>{{ course[0] }}</td>
+                        <td>{{ course[1] }}</td>
+                        <td>{{ course[2] }}</td>
+                        <td>{{ course[5] }}</td>
+                        <td>{{ course[6] }}</td>
+                        <td>{{ course[3] if course[3] else '未评分' }}</td>
+                        <td>{{ course[4] if course[4] else '未评价' }}</td>
+                        <td>
+                            <button class="btn btn-drop" onclick="dropCourse('{{ course[0] }}', '{{ course[1] }}')">
+                                退选
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-message">您还没有选择任何专业选修课程</div>
+            {% endif %}
+        </div>
+
+        <!-- 可选课程 -->
+        <div class="section">
+            <h2>可选课程 ({{ available_courses|length }})</h2>
+            {% if available_courses %}
+            <table class="course-table">
+                <thead>
+                    <tr>
+                        <th>课程编号</th>
+                        <th>课程名称</th>
+                        <th>课程类型</th>
+                        <th>学分</th>
+                        <th>总课时</th>
+                        <th>任课教师</th>
+                        <th>开课时间</th>
+                        <th>上课时间</th>
+                        <th>开课学院</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for course in available_courses %}
+                    <tr>
+                        <td>{{ course[0] }}</td>
+                        <td>{{ course[1] }}</td>
+                        <td>{{ course[2] }}</td>
+                        <td>{{ course[3] }}</td>
+                        <td>{{ course[5] }}</td>
+                        <td>{{ course[4] if course[4] != '未定' else '待定' }}</td>
+                        <td>{{ course[6] }} ~ {{ course[7] }}</td>
+                        <td>{{ course[8] if course[8] != '未定' else '待定' }}</td>
+                        <td>{{ course[10] }}</td>
+                        <td>
+                            <button class="btn btn-select" onclick="selectCourse('{{ course[0] }}', '{{ course[1] }}')">
+                                选课
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-message">没有可选的专业选修课程了</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function showMessage(text, isSuccess) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = 'message ' + (isSuccess ? 'success' : 'error');
+            messageDiv.style.display = 'block';
+            
+            setTimeout(function() {
+                messageDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function selectCourse(coNo, coName) {
+            if (!confirm('确定要选择课程《' + coName + '》吗？\n\n提示：选课后，推荐系统会根据您的选课信息动态更新推荐结果。')) {
+                return;
+            }
+
+            $.ajax({
+                url: '/api/select_course',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ co_no: coNo }),
+                success: function(response) {
+                    if (response.success) {
+                        showMessage(response.message + ' 推荐系统已自动更新！', true);
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        showMessage(response.message, false);
+                    }
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON;
+                    showMessage(response ? response.message : '选课失败，请稍后重试', false);
+                }
+            });
+        }
+
+        function dropCourse(coNo, coName) {
+            if (!confirm('确定要退选课程《' + coName + '》吗？\n\n提示：退课后，推荐系统会根据您的选课信息动态更新推荐结果。')) {
+                return;
+            }
+
+            $.ajax({
+                url: '/api/drop_course',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ co_no: coNo }),
+                success: function(response) {
+                    if (response.success) {
+                        showMessage(response.message + ' 推荐系统已自动更新！', true);
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        showMessage(response.message, false);
+                    }
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON;
+                    showMessage(response ? response.message : '退课失败，请稍后重试', false);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+

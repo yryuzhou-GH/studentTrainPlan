@@ -1,6 +1,13 @@
 from flask import Flask, render_template, request, flash,  jsonify, redirect, url_for, session
 from utils import query, map_student_course, recommed_module
 from utils.dynamic_recommend import DynamicCourseRecommender, to_bar_json, regular_data
+from utils.course_selection import (
+    get_available_elective_courses, 
+    get_student_chosen_courses,
+    select_course,
+    drop_course,
+    get_course_statistics
+)
 import json
 import time
 import os
@@ -292,25 +299,68 @@ def getRecommedData():
         return jsonify(coursePersonJson)
     
     except Exception as e:
-        print(f"推荐系统错误: {str(e)}")
+        print(f"新推荐系统错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
         # 如果新系统出错，回退到原有系统
         try:
+            print("尝试使用旧推荐系统（SVD算法）...")
             id2Student, id2Course, stuNo2MatId = map_student_course.get_map_student()
+            
+            # 检查学生是否在映射中
+            if stu_no not in stuNo2MatId:
+                return jsonify({"error": f"学生 {stu_no} 不在学生列表中"}), 404
+            
             scoreMatrix = map_student_course.get_matrix(id2Student)
-            topNCourse, topNStudent = recommed_module.recommedCoursePerson(
-                scoreMatrix, stuNo2MatId[stu_no], N=20
+            student_mat_id = stuNo2MatId[stu_no]
+            
+            # 调用旧推荐算法
+            result = recommed_module.recommedCoursePerson(
+                scoreMatrix, student_mat_id, N=20
             )
-            id2Student = {i:id2Student[i][0] for i in id2Student.keys()}
-            courseJson = recommed_module.toBarJson(topNCourse, id2Course)
-            personJson = recommed_module.toBarJson(topNStudent, id2Student)
-            courseJson = recommed_module.regularData(courseJson, 1, 5)
-            personJson = recommed_module.regularData(personJson, 0, 1)
-            coursePersonJson = {}
-            coursePersonJson['course'] = courseJson
-            coursePersonJson['person'] = personJson
+            
+            # 检查返回结果
+            if result is None:
+                print("警告: 旧推荐系统返回 None（可能已选完所有课程）")
+                # 返回空数据但保持格式
+                courseJson = {"source": [["amount", "product"]]}
+                personJson = {"source": [["amount", "product"]]}
+            else:
+                topNCourse, topNStudent = result
+                
+                # 转换ID映射格式
+                id2Student_name = {i: id2Student[i][0] for i in id2Student.keys()}
+                
+                # 转换为JSON格式
+                courseJson = recommed_module.toBarJson(topNCourse, id2Course)
+                personJson = recommed_module.toBarJson(topNStudent, id2Student_name)
+                
+                # 归一化数据
+                if len(courseJson['source']) > 1:  # 有数据才归一化
+                    courseJson = recommed_module.regularData(courseJson, 1, 5)
+                if len(personJson['source']) > 1:  # 有数据才归一化
+                    personJson = recommed_module.regularData(personJson, 0, 1)
+            
+            # 确保数据格式正确（至少包含列名）
+            if not courseJson.get('source') or len(courseJson['source']) == 0:
+                courseJson = {"source": [["amount", "product"]]}
+            if not personJson.get('source') or len(personJson['source']) == 0:
+                personJson = {"source": [["amount", "product"]]}
+            
+            coursePersonJson = {
+                'course': courseJson,
+                'person': personJson
+            }
+            
+            print(f"旧推荐系统返回 - 课程数量: {len(courseJson['source']) - 1}, 学生数量: {len(personJson['source']) - 1}")
             return jsonify(coursePersonJson)
+            
         except Exception as e2:
-            return jsonify({"error": f"推荐系统错误: {str(e2)}"}), 500
+            print(f"旧推荐系统也出错: {str(e2)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": f"推荐系统错误: 新系统错误={str(e)}, 旧系统错误={str(e2)}"}), 500
 
 @app.route('/personal_information', methods=['GET', 'POST'])
 def personal_information():
@@ -430,6 +480,101 @@ def deepseek_chat():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/course_selection', methods=['GET', 'POST'])
+def course_selection():
+    """
+    选课页面
+    """
+    stu_no = session.get('stu_id')
+    
+    if not stu_no:
+        return redirect(url_for('login'))
+    
+    # 获取可选课程和已选课程
+    available_courses = get_available_elective_courses(stu_no)
+    chosen_courses = get_student_chosen_courses(stu_no)
+    
+    return render_template('course_selection.html', 
+                         available_courses=available_courses,
+                         chosen_courses=chosen_courses)
+
+
+@app.route('/api/select_course', methods=['POST'])
+def api_select_course():
+    """
+    API: 选课接口
+    """
+    stu_no = session.get('stu_id')
+    
+    if not stu_no:
+        return jsonify({"success": False, "message": "用户未登录"}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据格式错误"}), 400
+        
+        co_no = data.get('co_no')
+        
+        if not co_no:
+            return jsonify({"success": False, "message": "课程编号不能为空"}), 400
+        
+        print(f"选课请求 - 学生: {stu_no}, 课程: {co_no}")
+        success, message = select_course(stu_no, co_no)
+        print(f"选课结果 - 成功: {success}, 消息: {message}")
+        
+        if success:
+            return jsonify({"success": True, "message": message}), 200
+        else:
+            return jsonify({"success": False, "message": message}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"服务器错误: {str(e)}"}), 500
+
+
+@app.route('/api/drop_course', methods=['POST'])
+def api_drop_course():
+    """
+    API: 退课接口
+    """
+    stu_no = session.get('stu_id')
+    
+    if not stu_no:
+        return jsonify({"success": False, "message": "用户未登录"}), 401
+    
+    data = request.get_json()
+    co_no = data.get('co_no')
+    
+    if not co_no:
+        return jsonify({"success": False, "message": "课程编号不能为空"}), 400
+    
+    success, message = drop_course(stu_no, co_no)
+    
+    if success:
+        return jsonify({"success": True, "message": message}), 200
+    else:
+        return jsonify({"success": False, "message": message}), 400
+
+
+@app.route('/api/get_course_statistics', methods=['GET'])
+def api_get_course_statistics():
+    """
+    API: 获取课程统计信息
+    """
+    statistics = get_course_statistics()
+    
+    result = []
+    for row in statistics:
+        result.append({
+            'co_no': row[0],
+            'co_name': row[1],
+            'student_count': row[2]
+        })
+    
+    return jsonify(result)
 
 
 if __name__ == '__main__':

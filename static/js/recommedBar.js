@@ -6,8 +6,24 @@ var app = {};
 optionCourse = null;
 optionPerson = null;
 
-// 添加错误处理和调试信息
-$.ajax({
+// 定义获取推荐数据的函数，方便刷新时调用
+function fetchRecommendData() {
+    // 显示加载状态
+    var loadingOption = {
+        title: {
+            text: '正在加载推荐数据...',
+            left: 'center',
+            top: 'middle',
+            textStyle: {
+                fontSize: 16,
+                color: '#666'
+            }
+        }
+    };
+    chartCourse.setOption(loadingOption, true);
+    chartPerson.setOption(loadingOption, true);
+    
+    $.ajax({
     url: '/getRecommedData',
     type: 'GET',
     dataType: 'json',
@@ -156,4 +172,11 @@ $.ajax({
         chartCourse.setOption(errorOption, true);
         chartPerson.setOption(errorOption, true);
     }
-});
+    });
+}
+
+// 页面加载时获取推荐数据
+fetchRecommendData();
+
+// 将刷新函数暴露到全局，方便外部调用
+window.refreshRecommendData = fetchRecommendData;

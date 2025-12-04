@@ -33,6 +33,7 @@
                     </div>
                 </li>
                 <li class="nav_1"><a class="nav_but" href="{{ url_for('recommed') }}">课程推荐</a></li>
+                <li class="nav_1"><a class="nav_but" href="{{ url_for('course_selection') }}">选课中心</a></li>
                 <li class="nav_1"><a class="nav_but" href="{{ url_for('train_plan') }}">课程进度</a></li>
                 <li class="nav_1"><a class="nav_but" href="{{ url_for('index') }}">首页</a></li>
             </ul>
@@ -64,7 +65,12 @@
 
 <div class = "recommed_course">
     <center>
-        <p class="on" style="font-size:30px;">您可能喜欢的课程</p>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+            <p class="on" style="font-size:30px; margin: 0;">您可能喜欢的课程</p>
+            <button id="refresh-btn" onclick="refreshRecommendData()" style="padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                刷新推荐
+            </button>
+        </div>
         <div class = "recommed_box" id="course_box" style="width:900px; height:700px;border:1px solid;"></div>
     </center>
 </div>
