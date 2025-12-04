@@ -231,9 +231,13 @@ class DynamicCourseRecommender:
         # 步骤1: 找到两个向量都非零的位置（共同评分项）
         # 只考虑学生都选过的课程，忽略未选课程
         mask = (vec1 != 0) & (vec2 != 0)
+        common_count = np.sum(mask)
         
         # 如果共同评分项少于2个，无法计算相关性
-        if np.sum(mask) < 2:
+        if common_count < 2:
+            # 如果共同选课数为1，返回一个很小的正数（0.1），表示有轻微相似
+            if common_count == 1:
+                return 0.1
             return 0.0
         
         # 步骤2: 提取共同评分项
@@ -336,6 +340,7 @@ class DynamicCourseRecommender:
         此时采用基于专业的热门课程推荐策略：
         1. 优先推荐学生专业下的热门课程（选课人数多）
         2. 如果专业课程不足，补充其他热门课程
+        3. 即使没有选课数据，也会推荐所有可用的专业选修课程
         
         参数:
             stu_no: str, 学生编号
@@ -364,38 +369,61 @@ class DynamicCourseRecommender:
         # 步骤2: 构建专业课程编号集合（用于快速判断课程是否属于该专业）
         major_course_nos = {row[0] for row in major_courses} if major_courses else set()
         
-        # 步骤3: 计算每门未选课程的热度（选课人数）
-        course_popularity = {}
+        # 步骤3: 筛选所有未选的专业选修课程
+        prof_elective_candidates = []
         for course_id in unrated_courses:
             if course_id in id_to_course_no:
                 co_no, co_name, classification, major = id_to_course_no[course_id]
-
-                # 只考虑“专业选修”类课程（包含“专业选修-XXX”这类前缀）
-                if not (classification and str(classification).startswith("专业选修")):
-                    continue
-                # 统计选过这门课的学生数量（评分矩阵中非零元素的数量）
-                students_count = np.sum(score_matrix[:, course_id] > 0)
-                course_popularity[course_id] = {
-                    'count': students_count,           # 选课人数（热度）
-                    'co_no': co_no,                   # 课程编号
-                    'is_major_course': co_no in major_course_nos  # 是否属于该专业
-                }
+                
+                # 只考虑"专业选修"类课程（包含"专业选修-XXX"这类前缀）
+                if classification and str(classification).startswith("专业选修"):
+                    # 统计选过这门课的学生数量（评分矩阵中非零元素的数量）
+                    students_count = np.sum(score_matrix[:, course_id] > 0)
+                    is_major_course = co_no in major_course_nos
+                    
+                    prof_elective_candidates.append({
+                        'course_id': course_id,
+                        'co_no': co_no,
+                        'co_name': co_name,
+                        'students_count': students_count,
+                        'is_major_course': is_major_course
+                    })
+        
+        print(f"调试信息 - 冷启动推荐: 找到 {len(prof_elective_candidates)} 门专业选修候选课程")
+        
+        # 如果没有找到任何专业选修课程，尝试推荐所有未选课程（放宽限制）
+        if not prof_elective_candidates:
+            print(f"警告: 未找到专业选修课程，尝试推荐所有未选课程")
+            for course_id in unrated_courses:
+                if course_id in id_to_course_no:
+                    co_no, co_name, classification, major = id_to_course_no[course_id]
+                    # 排除必修课程，只推荐选修类课程
+                    if classification and ("选修" in str(classification) or "任选" in str(classification)):
+                        students_count = np.sum(score_matrix[:, course_id] > 0)
+                        is_major_course = co_no in major_course_nos
+                        prof_elective_candidates.append({
+                            'course_id': course_id,
+                            'co_no': co_no,
+                            'co_name': co_name,
+                            'students_count': students_count,
+                            'is_major_course': is_major_course
+                        })
         
         # 步骤4: 将课程分为两类：专业课程和其他课程
         major_course_scores = []  # 专业课程列表
         other_course_scores = []  # 其他课程列表
         
-        for course_id, info in course_popularity.items():
-            # 热度评分 = 选课人数（基础热度）
-            popularity_score = float(info['count'])
+        for candidate in prof_elective_candidates:
+            # 热度评分 = 选课人数（基础热度）+ 基础分（确保即使没有选课数据也有评分）
+            popularity_score = float(candidate['students_count']) + 1.0  # 加1分基础分，避免0分
             
-            if info['is_major_course']:
+            if candidate['is_major_course']:
                 # 专业课程额外加分（+10分），提高专业课程优先级
                 popularity_score += 10.0
-                major_course_scores.append((course_id, popularity_score))
+                major_course_scores.append((candidate['course_id'], popularity_score))
             else:
                 # 非专业课程，仅使用基础热度
-                other_course_scores.append((course_id, popularity_score))
+                other_course_scores.append((candidate['course_id'], popularity_score))
         
         # 步骤5: 分别对两类课程按热度排序（降序）
         major_course_scores.sort(key=lambda x: x[1], reverse=True)
@@ -408,7 +436,14 @@ class DynamicCourseRecommender:
             remaining = top_n - len(recommended_courses)
             recommended_courses.extend(other_course_scores[:remaining])
         
-        print(f"冷启动推荐完成：专业课程 {len(major_course_scores)} 门，其他课程 {len(other_course_scores)} 门，共推荐 {len(recommended_courses)} 门")
+        print(f"冷启动推荐完成：找到 {len(prof_elective_candidates)} 门候选课程，专业课程 {len(major_course_scores)} 门，其他课程 {len(other_course_scores)} 门，共推荐 {len(recommended_courses)} 门")
+        
+        # 如果还是没有推荐结果，至少返回前top_n门专业选修课程（即使没有热度数据）
+        if not recommended_courses and prof_elective_candidates:
+            print(f"警告: 没有热度数据，直接推荐前 {min(top_n, len(prof_elective_candidates))} 门专业选修课程")
+            for i, candidate in enumerate(prof_elective_candidates[:top_n]):
+                score = 10.0 if candidate['is_major_course'] else 5.0
+                recommended_courses.append((candidate['course_id'], score))
         
         return recommended_courses, id_to_course_no
     
@@ -487,11 +522,38 @@ class DynamicCourseRecommender:
         student_vector = score_matrix[student_id]
         
         # 步骤4: 找到未选过的课程（评分为0的课程）
-        unrated_courses = np.where(student_vector == 0)[0]
+        # 注意：这里只考虑"专业选修"类课程，而不是所有课程
+        # 因为学生可能已经选完了所有必修课程，但还有专业选修课程可选
+        all_unrated_courses = np.where(student_vector == 0)[0]
+        
+        # 筛选出未选的专业选修课程
+        unrated_prof_elective = []
+        for course_id in all_unrated_courses:
+            if course_id in id_to_course_no:
+                _, _, classification, _ = id_to_course_no[course_id]
+                if classification and str(classification).startswith("专业选修"):
+                    unrated_prof_elective.append(course_id)
+        
+        # 如果找不到专业选修课程，再考虑所有未选课程
+        if len(unrated_prof_elective) > 0:
+            unrated_courses = np.array(unrated_prof_elective)
+            print(f"调试信息 - 学生 {stu_no}: 总课程数={len(id_to_course_no)}, 已选课程数={np.sum(student_vector > 0)}, 未选专业选修课程数={len(unrated_courses)}")
+        else:
+            unrated_courses = all_unrated_courses
+            print(f"调试信息 - 学生 {stu_no}: 总课程数={len(id_to_course_no)}, 已选课程数={np.sum(student_vector > 0)}, 未选课程数={len(unrated_courses)} (未找到专业选修课程，使用所有未选课程)")
         
         if len(unrated_courses) == 0:
-            print(f"警告: 学生 {stu_no} 已选完所有课程，无法推荐")
+            print(f"警告: 学生 {stu_no} 已选完所有可推荐课程（专业选修课程），无法推荐")
             return [], id_to_course_no
+        
+        # 调试：统计未选课程中专业选修课程的数量
+        prof_elective_count = 0
+        for course_id in unrated_courses:
+            if course_id in id_to_course_no:
+                _, _, classification, _ = id_to_course_no[course_id]
+                if classification and str(classification).startswith("专业选修"):
+                    prof_elective_count += 1
+        print(f"调试信息 - 未选课程中专业选修课程数量: {prof_elective_count}")
         
         # 步骤5: 检查是否为冷启动情况
         if self._is_cold_start(student_vector, min_courses=3):
@@ -529,18 +591,21 @@ class DynamicCourseRecommender:
                 popular_courses.sort(key=lambda x: x[1], reverse=True)
                 return popular_courses[:top_n], id_to_course_no
         
-        # 步骤7: 仅在“专业选修”课程中使用协同过滤算法计算预测评分
-        # 只对“专业选修”类课程进行推荐
+        # 步骤7: 筛选所有"专业选修"类课程
         prof_elective_courses = []
         for course_id in unrated_courses:
             if course_id in id_to_course_no:
-                _, _, classification, _ = id_to_course_no[course_id]
+                co_no, co_name, classification, major = id_to_course_no[course_id]
+                # 只推荐"专业选修"类课程（包含"专业选修-XXX"这类前缀）
                 if classification and str(classification).startswith("专业选修"):
                     prof_elective_courses.append(course_id)
+                    print(f"调试信息 - 找到专业选修课程: {co_name} (分类: {classification})")
+
+        print(f"调试信息 - 筛选到的专业选修课程数量: {len(prof_elective_courses)}")
 
         if not prof_elective_courses:
-            # 如果在未选课程中找不到任何“专业选修”课程，则回退到冷启动 / 热门课程推荐
-            print(f"警告: 学生 {stu_no} 未找到可推荐的专业选修课程，回退到冷启动/热门课程推荐")
+            # 如果在未选课程中找不到任何"专业选修"课程，则回退到冷启动推荐
+            print(f"警告: 学生 {stu_no} 未找到可推荐的专业选修课程，回退到冷启动推荐")
             student_major = self._get_student_major(stu_no)
             if student_major:
                 return self._cold_start_recommend(
@@ -548,18 +613,33 @@ class DynamicCourseRecommender:
                     unrated_courses, top_n
                 )
             else:
-                course_popularity = np.sum(score_matrix > 0, axis=0)
-                popular_courses = [(idx, float(course_popularity[idx])) for idx in unrated_courses if course_popularity[idx] > 0]
-                popular_courses.sort(key=lambda x: x[1], reverse=True)
-                return popular_courses[:top_n], id_to_course_no
+                # 如果没有专业信息，尝试推荐所有包含"选修"或"任选"的课程
+                print(f"警告: 无法获取学生专业，尝试推荐所有选修类课程")
+                elective_courses = []
+                for course_id in unrated_courses:
+                    if course_id in id_to_course_no:
+                        _, _, classification, _ = id_to_course_no[course_id]
+                        if classification and ("选修" in str(classification) or "任选" in str(classification)):
+                            students_count = np.sum(score_matrix[:, course_id] > 0)
+                            elective_courses.append((course_id, float(students_count) + 1.0))
+                
+                if elective_courses:
+                    elective_courses.sort(key=lambda x: x[1], reverse=True)
+                    return elective_courses[:top_n], id_to_course_no
+                else:
+                    # 最后的回退：返回空列表
+                    print(f"警告: 无法找到任何可推荐的选修课程")
+                    return [], id_to_course_no
 
         course_scores = []
         for course_id in prof_elective_courses:
             # 找到选过这门课的所有学生
             students_who_took = np.where(score_matrix[:, course_id] > 0)[0]
             
-            # 如果没有人选过这门课，跳过
+            # 如果没有人选过这门课，给一个默认评分（基于课程基本信息）
             if len(students_who_took) == 0:
+                # 给新课程一个基础评分（3.0分），确保它们能被推荐
+                course_scores.append((course_id, 3.0))
                 continue
             
             # 计算加权平均评分（基于学生相似度）
@@ -612,6 +692,7 @@ class DynamicCourseRecommender:
                 popular_courses.sort(key=lambda x: x[1], reverse=True)
                 return popular_courses[:top_n], id_to_course_no
         
+        print(f"调试信息 - 协同过滤推荐成功，返回 {len(top_courses)} 门课程")
         return top_courses, id_to_course_no
     
     def recommend_similar_students(self, stu_no, top_n=20):
@@ -653,9 +734,51 @@ class DynamicCourseRecommender:
             if similarity > 0:
                 student_similarities.append((other_student_id, similarity))
         
+        print(f"调试信息 - 相似学生推荐: 找到 {len(student_similarities)} 个正相似度的学生")
+        
+        # 如果没有找到正相似度的学生，使用备选策略
+        if len(student_similarities) == 0:
+            print("警告: 没有找到正相似度的学生，使用备选策略（基于共同选课数量和评分相似度）")
+            # 备选策略：综合考虑共同选课数量和评分相似度
+            for other_student_id in range(len(id_to_stu_no)):
+                if other_student_id == student_id:
+                    continue
+                
+                other_student_vector = score_matrix[other_student_id]
+                # 计算共同选课数量
+                common_courses = np.sum((student_vector > 0) & (other_student_vector > 0))
+                
+                if common_courses > 0:
+                    # 计算共同选课比例（基础相似度）
+                    max_common = min(np.sum(student_vector > 0), np.sum(other_student_vector > 0))
+                    if max_common > 0:
+                        common_ratio = float(common_courses) / max_common
+                        
+                        # 计算共同选课的平均评分差异（评分相似度）
+                        # 如果评分差异小，说明选课偏好相似
+                        common_mask = (student_vector > 0) & (other_student_vector > 0)
+                        if np.sum(common_mask) > 0:
+                            common_scores_stu = student_vector[common_mask]
+                            common_scores_other = other_student_vector[common_mask]
+                            # 计算平均绝对误差（MAE），然后转换为相似度
+                            mae = np.mean(np.abs(common_scores_stu - common_scores_other))
+                            # MAE越小，相似度越高；将MAE映射到0-1（假设最大MAE为5）
+                            score_similarity = max(0, 1.0 - mae / 5.0)
+                        else:
+                            score_similarity = 0.5  # 默认值
+                        
+                        # 综合相似度 = 共同选课比例 * 0.6 + 评分相似度 * 0.4
+                        # 这样即使所有学生都选了所有课程，也能根据评分差异区分
+                        similarity_score = common_ratio * 0.6 + score_similarity * 0.4
+                        student_similarities.append((other_student_id, similarity_score))
+                        
+                        print(f"调试 - 学生{other_student_id}: 共同选课比例={common_ratio:.3f}, 评分相似度={score_similarity:.3f}, 综合相似度={similarity_score:.3f}")
+        
         # 按相似度排序（降序），取前N个
         student_similarities.sort(key=lambda x: x[1], reverse=True)
         top_students = student_similarities[:top_n]
+        
+        print(f"调试信息 - 相似学生推荐: 最终返回 {len(top_students)} 个学生")
         
         return top_students, id_to_stu_no
     
