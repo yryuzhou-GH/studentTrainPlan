@@ -18,6 +18,8 @@
          <a class="logo_box" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename="images/logo1.jpg") }}"/></a>
          <ul class="nav_box">
              <li class="nav_1"><a class="nav_but" href="{{ url_for('personal_information') }}">个人中心</a></li>
+             <!--251201，用户中心建设完成-->
+             <li class="nav_1"><a class="nav_but" href="{{ url_for('inbox') }}">消息中心</a></li>
              <li class="nav_1"><a class="nav_but" href="{{ url_for('news_center') }}">课程论坛</a>
                <div class="nav_slide">
                 <div class="nav_slide1">
@@ -30,8 +32,6 @@
              <li class="nav_1"><a class="nav_but" href="{{ url_for('course_selection') }}">选课中心</a></li>
              <li class="nav_1"><a class="nav_but" href="{{ url_for('train_plan') }}">课程进度</a></li>
              <li class="nav_1"><a class="nav_but" href="{{ url_for('index') }}">首页</a></li>
-             <!--251201，用户收信件建设中-->
-             <li class="nav_1"><a class="nav_but" href="{{ url_for('inbox') }}">消息中心</a></li>
          </ul>
     </div>
         <script>
@@ -48,7 +48,7 @@
           </script>
 </div>
 <!--banner部分开始-->
-  <div class="banner_box">
+  <div class="banner_box" style="height: 388px;">
         <ul class="banner_pic">
             <li><img src="../static/images/logo.jpeg" /></li>
             <li><img src="../static/images/logo.jpeg" /></li>

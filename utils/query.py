@@ -10,6 +10,15 @@ def _get_connection():
         charset='utf8'
     )
 
+#251127，insert
+def insert(sql, params):
+    conn =_get_connection()
+    with conn.cursor() as cursor:
+        cursor.execute(sql, params)
+        conn.commit()
+        return cursor.lastrowid # 返回插入的id
+    conn.close()
+###251217你们他妈别删我代码了
 
 def query(sql):
     """
