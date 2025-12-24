@@ -731,13 +731,11 @@ a:active, a:focus {
 }
 
 .recommed_course{
-	position: absolute;
+	margin: 0 auto;
 	margin-top:100px;
-	margin-left:200px;
 }
 
 .recommed_person{
-	position: absolute;
+	margin: 0 auto;
 	margin-top:100px;
-	margin-left:1200px;
 }

@@ -93,7 +93,7 @@ CREATE TABLE announcement (
     id INT AUTO_INCREMENT PRIMARY KEY,
     topic VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
-    time_str DATETIME NOT NULL,
+    time_str DATETIME NOT NULL
 )ENGINE=INNODB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE announcement_visibility (

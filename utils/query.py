@@ -27,6 +27,7 @@ def query(sql):
     """
     db = _get_connection()
     cur = db.cursor()
+    result = []
     try:
         cur.execute(sql)
         result = cur.fetchall()
