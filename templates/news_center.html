@@ -4,7 +4,8 @@
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link href="{{ url_for('static', filename='css/style1.css') }}" rel="stylesheet" type="text/css" />
 <link rel="icon" href="{{ url_for('static', filename='images/logo.ico') }}" type="image/x-icon"/>
-<script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+<script src="{{ url_for('static', filename='js/jquery1.42.min.js') }}" type="text/javascript"></script>
+<script src="{{ url_for('static', filename='js/jquery.js') }}"></script>
 <title>课程论坛</title>
 </head>
 
@@ -113,15 +114,9 @@ $(function() {
         'my_topics': 'my_topics',
         'hot': 'hot'
     };
-    
-    // 获取当前section并映射到filter
     if (sectionToFilter[currentFilter]) {
         currentFilter = sectionToFilter[currentFilter];
-    } else if (currentFilter === 'all' || !currentFilter) {
-        currentFilter = 'all';
     }
-    
-    console.log('当前筛选:', currentFilter);
     
     // 加载话题列表
     function loadTopics(page, sortBy, filter) {
@@ -129,13 +124,7 @@ $(function() {
         currentSort = sortBy || 'latest';
         currentFilter = filter || currentFilter;
         
-        // 显示加载状态
-        $("#topics-list").html(`
-            <div class="loading_container">
-                <div class="loading_spinner"></div>
-                <div class="loading_text">正在加载话题...</div>
-            </div>
-        `);
+        $("#topics-list").html('<div class="loading">加载中...</div>');
         
         $.ajax({
             url: "/api/get_discussion_topics",
@@ -146,74 +135,24 @@ $(function() {
                 filter: currentFilter,
                 per_page: 10
             },
-            timeout: 10000, // 10秒超时
             success: function(res) {
-                console.log('API响应:', res); // 添加调试日志
-                if (res.success && res.data !== undefined) {
+                if (res.success && res.data) {
                     renderTopics(res.data);
                     renderPagination(res.pagination);
                 } else {
-                    console.log('API返回错误:', res); // 调试日志
-                    $("#topics-list").html(`
-                        <div class="error_container">
-                            <div class="error_icon">⚠️</div>
-                            <div class="error_text">加载失败</div>
-                            <div class="error_message">${res.message || '请检查网络连接后重试'}</div>
-                            <button class="retry_btn" onclick="loadTopics(${currentPage}, '${currentSort}', '${currentFilter}')">重新加载</button>
-                        </div>
-                    `);
+                    $("#topics-list").html('<div class="error">加载失败，请刷新重试</div>');
                 }
             },
-            error: function(xhr, status, error) {
-                console.log('AJAX错误:', {xhr: xhr, status: status, error: error}); // 添加调试日志
-                var errorMessage = "网络连接失败";
-                if (status === 'timeout') {
-                    errorMessage = "请求超时，请检查网络连接";
-                } else if (xhr.status === 401) {
-                    errorMessage = "用户未登录，请先登录";
-                } else if (xhr.status === 500) {
-                    errorMessage = "服务器错误，请稍后重试";
-                }
-                
-                $("#topics-list").html(`
-                    <div class="error_container">
-                        <div class="error_icon">❌</div>
-                        <div class="error_text">加载失败</div>
-                        <div class="error_message">${errorMessage}</div>
-                        <div class="error_details">状态: ${xhr.status}, 错误: ${error}</div>
-                        <button class="retry_btn" onclick="loadTopics(${currentPage}, '${currentSort}', '${currentFilter}')">重新加载</button>
-                    </div>
-                `);
+            error: function() {
+                $("#topics-list").html('<div class="error">加载失败，请刷新重试</div>');
             }
         });
     }
     
-    // 将loadTopics函数暴露到全局作用域，供重试按钮使用
-    window.loadTopics = loadTopics;
-    
     // 渲染话题列表
     function renderTopics(topics) {
-        if (!topics || topics.length === 0) {
-            var emptyMessage = "暂无话题";
-            var emptyIcon = "📝";
-            
-            if (currentFilter === 'my_topics') {
-                emptyMessage = "您还没有发布过话题";
-                emptyIcon = "✏️";
-            } else if (currentFilter === 'hot') {
-                emptyMessage = "暂无热门话题";
-                emptyIcon = "🔥";
-            }
-            
-            $("#topics-list").html(`
-                <div class="empty_state_container">
-                    <div class="empty_icon">${emptyIcon}</div>
-                    <div class="empty_text">${emptyMessage}</div>
-                    <div class="empty_action">
-                        <a href="/course_discussion" class="publish_btn">发布第一个话题</a>
-                    </div>
-                </div>
-            `);
+        if (topics.length === 0) {
+            $("#topics-list").html('<div class="empty_state">暂无话题</div>');
             return;
         }
         
@@ -351,53 +290,6 @@ $(function() {
     
     // 初始化加载
     loadTopics(1, currentSort, currentFilter);
-    
-    // 检查URL参数，如果有success参数，显示成功消息
-    var urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('published') === 'success') {
-        setTimeout(function() {
-            showSuccessMessage("话题发布成功！您可以在下方看到刚发布的话题。");
-        }, 500);
-        
-        // 清理URL参数
-        if (window.history && window.history.replaceState) {
-            var cleanUrl = window.location.pathname + window.location.hash;
-            window.history.replaceState({}, document.title, cleanUrl);
-        }
-    }
-    
-    // 成功消息显示函数
-    function showSuccessMessage(message) {
-        var notification = $('<div class="success_banner">' + 
-            '<span class="success_icon">🎉</span>' + 
-            '<span class="success_text">' + message + '</span>' + 
-            '<button class="success_close">×</button>' + 
-            '</div>');
-        
-        $(".forum_content").prepend(notification);
-        
-        setTimeout(function() {
-            notification.addClass("show");
-        }, 10);
-        
-        // 点击关闭
-        notification.find(".success_close").click(function() {
-            notification.removeClass("show");
-            setTimeout(function() {
-                notification.remove();
-            }, 300);
-        });
-        
-        // 自动关闭
-        setTimeout(function() {
-            if (notification.hasClass("show")) {
-                notification.removeClass("show");
-                setTimeout(function() {
-                    notification.remove();
-                }, 300);
-            }
-        }, 5000);
-    }
     
     // 自动刷新功能（可选，每30秒刷新一次）
     // setInterval(function() {
@@ -710,120 +602,6 @@ $(function() {
 }
 
 /* 加载和错误状态 */
-.loading_container, .error_container, .empty_state_container {
-    text-align: center;
-    padding: 60px 20px;
-}
-
-.loading_container {
-    color: #666;
-}
-
-.loading_spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #003d79;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.loading_text {
-    font-size: 16px;
-    color: #666;
-}
-
-.error_container {
-    color: #f56c6c;
-}
-
-.error_icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-}
-
-.error_text {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 8px;
-    color: #f56c6c;
-}
-
-.error_message {
-    font-size: 14px;
-    color: #999;
-    margin-bottom: 20px;
-}
-
-.retry_btn {
-    padding: 10px 24px;
-    background: #003d79;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.3s;
-}
-
-.retry_btn:hover {
-    background: #0056b3;
-}
-
-.error_details {
-    font-size: 12px;
-    color: #999;
-    margin-top: 8px;
-    font-family: monospace;
-}
-
-.empty_state_container {
-    color: #999;
-}
-
-.empty_icon {
-    font-size: 64px;
-    margin-bottom: 20px;
-    opacity: 0.6;
-}
-
-.empty_text {
-    font-size: 18px;
-    margin-bottom: 24px;
-    color: #666;
-}
-
-.empty_action {
-    margin-top: 20px;
-}
-
-.publish_btn {
-    display: inline-block;
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #003d79 0%, #0056b3 100%);
-    color: #fff;
-    text-decoration: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s;
-    box-shadow: 0 2px 8px rgba(0, 61, 121, 0.2);
-}
-
-.publish_btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 61, 121, 0.3);
-    text-decoration: none;
-    color: #fff;
-}
-
-/* 原有的加载和错误状态样式保持兼容 */
 .loading, .error, .empty_state {
     text-align: center;
     padding: 60px 20px;
@@ -854,57 +632,6 @@ $(function() {
     .forum_menu_item {
         flex-shrink: 0;
     }
-}
-
-/* 成功消息横幅 */
-.success_banner {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-    background: linear-gradient(135deg, #f6ffed 0%, #e6f7ff 100%);
-    border: 1px solid #b7eb8f;
-    border-radius: 8px;
-    color: #389e0d;
-    font-weight: 500;
-    opacity: 0;
-    transform: translateY(-10px);
-    transition: all 0.3s ease;
-}
-
-.success_banner.show {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.success_icon {
-    font-size: 18px;
-}
-
-.success_text {
-    flex: 1;
-    font-size: 14px;
-}
-
-.success_close {
-    background: none;
-    border: none;
-    color: #389e0d;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 0;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    transition: background-color 0.3s;
-}
-
-.success_close:hover {
-    background-color: rgba(56, 158, 13, 0.1);
 }
 </style>
 

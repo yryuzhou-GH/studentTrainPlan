@@ -473,13 +473,15 @@
 			}
 
 			// 编辑按钮点击事件
-			$("#edit-info-btn").click(function() {
+			$("#edit-info-btn").click(function(e) {
+				e.preventDefault();
 				// 填充当前数据到表单
-				$("#edit-name").val($("#info-name").text());
-				$("#edit-sex").val($("#info-sex").text());
-				$("#edit-college").val($("#info-college").text());
-				$("#edit-major").val($("#info-major").text());
-				$("#edit-modal").fadeIn(200);
+				$("#edit-name").val($("#info-name").text().trim());
+				$("#edit-sex").val($("#info-sex").text().trim());
+				$("#edit-college").val($("#info-college").text().trim());
+				$("#edit-major").val($("#info-major").text().trim());
+				// 显示模态框
+				$("#edit-modal").css("display", "block").hide().fadeIn(200);
 			});
 
 			// 更换头像按钮
@@ -504,7 +506,9 @@
 			});
 
 			// 提交编辑表单
-			$("#submit-edit-btn").click(function() {
+			$("#submit-edit-btn").click(function(e) {
+				e.preventDefault();
+				
 				var formData = {
 					name: $("#edit-name").val().trim(),
 					sex: $("#edit-sex").val(),
@@ -519,30 +523,46 @@
 				if (!formData.major) errors.push("专业不能为空");
 				
 				if (errors.length > 0) {
-					alert(errors.join("\n"));
+					showNotification(errors.join("，"), "error");
 					return;
 				}
 
 				// 检查是否有变化
-				var hasChange = formData.name !== $("#info-name").text() ||
-				               formData.sex !== $("#info-sex").text() ||
-				               formData.college !== $("#info-college").text() ||
-				               formData.major !== $("#info-major").text();
+				var currentName = $("#info-name").text().trim();
+				var currentSex = $("#info-sex").text().trim();
+				var currentCollege = $("#info-college").text().trim();
+				var currentMajor = $("#info-major").text().trim();
+				
+				var hasChange = formData.name !== currentName ||
+				               formData.sex !== currentSex ||
+				               formData.college !== currentCollege ||
+				               formData.major !== currentMajor;
 				
 				if (!hasChange) {
-					alert("没有修改任何信息");
+					showNotification("没有修改任何信息", "info");
 					return;
 				}
 
 				// 显示加载状态
-				$("#submit-edit-btn").prop("disabled", true).text("保存中...");
+				var submitBtn = $("#submit-edit-btn");
+				if (!submitBtn || submitBtn.length === 0) {
+					console.error("[ERROR] 找不到提交按钮");
+					showNotification("页面元素错误，请刷新页面重试", "error");
+					return;
+				}
+				
+				// 使用兼容的方法：attr 替代 prop（兼容旧版 jQuery）
+				submitBtn.attr("disabled", "disabled").text("保存中...");
 
+				console.log("[DEBUG] 提交数据:", formData);
+				
 				$.ajax({
 					url: "/api/update_personal_info",
 					type: "POST",
 					contentType: "application/json",
 					data: JSON.stringify(formData),
 					success: function(res) {
+						console.log("[DEBUG] 服务器响应:", res);
 						if (res.success) {
 							// 更新页面显示
 							$("#info-name").text(formData.name);
@@ -556,21 +576,40 @@
 							// 关闭模态框
 							$("#edit-modal").fadeOut(200);
 							
-							// 显示成功提示（可以使用更好的提示组件）
+							// 显示成功提示
 							showNotification("个人信息更新成功！", "success");
 						} else {
-							alert("更新失败：" + res.message);
+							var errorMsg = res.message || "未知错误";
+							console.error("[ERROR] 更新失败:", errorMsg);
+							showNotification("更新失败：" + errorMsg, "error");
 						}
 					},
-					error: function(xhr) {
+					error: function(xhr, status, error) {
+						console.error("[ERROR] AJAX请求失败:", {
+							status: xhr.status,
+							statusText: xhr.statusText,
+							responseText: xhr.responseText,
+							error: error
+						});
+						
 						var errorMsg = "更新失败，请稍后重试";
 						if (xhr.responseJSON && xhr.responseJSON.message) {
 							errorMsg = xhr.responseJSON.message;
+						} else if (xhr.status === 401) {
+							errorMsg = "用户未登录，请重新登录";
+						} else if (xhr.status === 400) {
+							errorMsg = "请求参数错误，请检查输入";
+						} else if (xhr.status === 500) {
+							errorMsg = "服务器错误，请稍后重试";
+						} else if (xhr.status === 0) {
+							errorMsg = "网络连接失败，请检查网络";
 						}
-						alert(errorMsg);
+						showNotification(errorMsg, "error");
 					},
 					complete: function() {
-						$("#submit-edit-btn").prop("disabled", false).text("保存");
+						// 使用选择器重新获取按钮，确保在作用域内
+						// 使用兼容的方法：removeAttr 替代 prop（兼容旧版 jQuery）
+						$("#submit-edit-btn").removeAttr("disabled").text("保存");
 					}
 				});
 			});
@@ -597,7 +636,7 @@
 					var reader = new FileReader();
 					reader.onload = function(e) {
 						$("#preview-img").attr("src", e.target.result);
-						$("#upload-avatar-btn").prop("disabled", false);
+						$("#upload-avatar-btn").removeAttr("disabled");
 					};
 					reader.readAsDataURL(file);
 				}
@@ -615,7 +654,7 @@
 				formData.append('avatar', fileInput.files[0]);
 
 				// 显示加载状态
-				$("#upload-avatar-btn").prop("disabled", true).text("上传中...");
+				$("#upload-avatar-btn").attr("disabled", "disabled").text("上传中...");
 
 				$.ajax({
 					url: "/api/upload_avatar",
@@ -633,7 +672,7 @@
 							// 关闭模态框
 							$("#avatar-modal").fadeOut(200);
 							$("#avatar-input").val("");
-							$("#upload-avatar-btn").prop("disabled", true);
+							$("#upload-avatar-btn").attr("disabled", "disabled");
 							
 							// 显示成功提示
 							showNotification("头像上传成功！", "success");
@@ -649,7 +688,7 @@
 						alert(errorMsg);
 					},
 					complete: function() {
-						$("#upload-avatar-btn").prop("disabled", false).text("上传");
+						$("#upload-avatar-btn").removeAttr("disabled").text("上传");
 					}
 				});
 			});
@@ -719,7 +758,7 @@
 				
 				// 显示加载状态
 				var submitBtn = $(this).find("button[type='submit']");
-				submitBtn.prop("disabled", true).text("修改中...");
+				submitBtn.attr("disabled", "disabled").text("修改中...");
 				
 				$.ajax({
 					url: "/api/change_password",
@@ -746,7 +785,7 @@
 						showNotification(errorMsg, "error");
 					},
 					complete: function() {
-						submitBtn.prop("disabled", false).text("修改密码");
+						submitBtn.removeAttr("disabled").text("修改密码");
 					}
 				});
 			});
@@ -769,7 +808,7 @@
 			// 恢复默认设置
 			$("#reset-settings-btn").click(function() {
 				if (confirm("确定要恢复默认设置吗？")) {
-					$("#course-notify, #system-notify, #auto-save").prop("checked", true);
+					$("#course-notify, #system-notify, #auto-save").attr("checked", "checked");
 					$("#theme-select").val("light");
 					$("#language-select").val("zh");
 					localStorage.removeItem('user_settings');
@@ -782,9 +821,21 @@
 			if (savedSettings) {
 				try {
 					var settings = JSON.parse(savedSettings);
-					$("#course-notify").prop("checked", settings.course_notify !== false);
-					$("#system-notify").prop("checked", settings.system_notify !== false);
-					$("#auto-save").prop("checked", settings.auto_save !== false);
+					if (settings.course_notify !== false) {
+						$("#course-notify").attr("checked", "checked");
+					} else {
+						$("#course-notify").removeAttr("checked");
+					}
+					if (settings.system_notify !== false) {
+						$("#system-notify").attr("checked", "checked");
+					} else {
+						$("#system-notify").removeAttr("checked");
+					}
+					if (settings.auto_save !== false) {
+						$("#auto-save").attr("checked", "checked");
+					} else {
+						$("#auto-save").removeAttr("checked");
+					}
 					if (settings.theme) $("#theme-select").val(settings.theme);
 					if (settings.language) $("#language-select").val(settings.language);
 				} catch(e) {

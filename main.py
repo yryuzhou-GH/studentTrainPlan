@@ -116,92 +116,46 @@ def course_discussion():
     if request.method == 'GET':
         return render_template('course_discussion.html')
     else:
-        try:
-            # 支持AJAX和表单提交
+        # 支持AJAX和表单提交
+        if request.is_json:
+            data = request.get_json()
+            topic = data.get('topic')
+            comments = data.get('comments')
+        else:
+            topic = request.form.get('topic')
+            comments = request.form.get('comments')
+        
+        # 验证
+        if not topic or not comments:
             if request.is_json:
-                data = request.get_json()
-                topic = data.get('topic', '').strip() if data else ''
-                comments = data.get('comments', '').strip() if data else ''
-            else:
-                topic = request.form.get('topic', '').strip()
-                comments = request.form.get('comments', '').strip()
-            
-            # 验证标题
-            if not topic:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "话题标题不能为空"}), 400
-                return "话题标题不能为空"
-            
-            if len(topic) > 100:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "话题标题不能超过100字"}), 400
-                return "话题标题不能超过100字"
-            
-            # 验证内容
-            if not comments:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "话题内容不能为空"}), 400
-                return "话题内容不能为空"
-            
-            if len(comments) < 10:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "话题内容至少需要10个字"}), 400
-                return "话题内容至少需要10个字"
-            
-            if len(comments) > 2000:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "话题内容不能超过2000字"}), 400
-                return "话题内容不能超过2000字"
-            
-            # 检查登录状态
-            stu_id = session.get('stu_id')
-            if not stu_id:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "用户未登录"}), 401
-                return redirect(url_for('login'))
-            
-            # 获取学生姓名
-            sql = "select NAME from STUDENT where STU_NO = '%s'" % stu_id
-            stu_name_result = query.query(sql)
-            if not stu_name_result or len(stu_name_result) == 0:
-                if request.is_json:
-                    return jsonify({"success": False, "message": "用户信息不存在"}), 404
-                return "用户信息不存在"
-            
-            stu_name = stu_name_result[0][0]
-            
-            # 生成唯一ID和时间戳
-            now = time.time()
-            now_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))
-            # 生成唯一ID：学生姓名 + 时间戳（去掉特殊字符）
-            news_id = stu_name + str(int(now_str.replace('-', '').replace(' ', '').replace(':', '')))
-            
-            # 转义SQL中的单引号（防止SQL注入）
-            topic_escaped = topic.replace("'", "''")
-            comments_escaped = comments.replace("'", "''")
-            stu_name_escaped = stu_name.replace("'", "''")
-            
-            # 插入数据库
-            sql = "INSERT INTO NEWS(TOPIC, COMMENTS, COMMENTER, NEWS_ID, IS_FIRST, CREATE_TIME) VALUES ('%s', '%s', '%s', '%s', '0', '%s')" % (
-                topic_escaped, comments_escaped, stu_name_escaped, news_id, now_str
-            )
-            query.update(sql)
-            
+                return jsonify({"success": False, "message": "话题标题和内容不能为空"}), 400
+            return "话题标题和内容不能为空"
+        
+        stu_id = session.get('stu_id')
+        if not stu_id:
             if request.is_json:
-                return jsonify({
-                    "success": True, 
-                    "message": "话题发布成功", 
-                    "news_id": news_id
-                })
-            return redirect(url_for('news_center'))
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            error_msg = f"发布失败: {str(e)}"
+                return jsonify({"success": False, "message": "用户未登录"}), 401
+            return redirect(url_for('login'))
+        
+        sql = "select NAME from STUDENT where STU_NO = '%s'" % stu_id
+        stu_name = query.query(sql)
+        if not stu_name:
             if request.is_json:
-                return jsonify({"success": False, "message": error_msg}), 500
-            return error_msg
+                return jsonify({"success": False, "message": "用户信息不存在"}), 404
+            return "用户信息不存在"
+        
+        stu_name = stu_name[0][0]
+        now = time.time()
+        now = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))
+        news_id = stu_name + str(int(now.replace('-', '').replace(' ', '').replace(':', '')))
+        
+        sql = "INSERT INTO NEWS(TOPIC, COMMENTS, COMMENTER, NEWS_ID, IS_FIRST, CREATE_TIME) VALUES ('%s', '%s', '%s', '%s', '0', '%s')" % (topic, comments, stu_name, news_id, now)
+        print(sql)
+        query.update(sql)
+        
+        if request.is_json:
+            return jsonify({"success": True, "message": "话题发布成功", "news_id": news_id})
+        return redirect(url_for('news_center'))
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -494,118 +448,6 @@ def getRecommedData():
             traceback.print_exc()
             return jsonify({"error": f"推荐系统错误: 新系统错误={str(e)}, 旧系统错误={str(e2)}"}), 500
 
-@app.route('/api/submit_difficulty_rating', methods=['POST'])
-def api_submit_difficulty_rating():
-    """
-    提交课程难度评分
-    """
-    try:
-        stu_no = session.get('stu_id')
-        if not stu_no:
-            return jsonify({"error": "用户未登录"}), 401
-        
-        data = request.get_json()
-        course_name = data.get('courseName', '').strip()
-        ratings = data.get('ratings', {})
-        comment = data.get('comment', '').strip()
-        
-        if not course_name:
-            return jsonify({"error": "课程名称不能为空"}), 400
-        
-        if not any(ratings.values()):
-            return jsonify({"error": "请至少为一个维度评分"}), 400
-        
-        # 验证评分范围
-        for key, value in ratings.items():
-            if value and (value < 1 or value > 5):
-                return jsonify({"error": f"评分必须在1-5之间"}), 400
-        
-        # 检查是否已经评分过
-        check_sql = """
-            SELECT COUNT(*) as count FROM COURSE_DIFFICULTY_RATING 
-            WHERE STU_NO = %s AND COURSE_NAME = %s
-        """
-        result = query_db(check_sql, (stu_no, course_name))
-        
-        if result and result[0]['count'] > 0:
-            # 更新现有评分
-            update_sql = """
-                UPDATE COURSE_DIFFICULTY_RATING 
-                SET OVERALL_RATING = %s, THEORY_RATING = %s, PRACTICE_RATING = %s, 
-                    HOMEWORK_RATING = %s, COMMENT = %s, UPDATE_TIME = NOW()
-                WHERE STU_NO = %s AND COURSE_NAME = %s
-            """
-            params = (
-                ratings.get('overall', 0) or None,
-                ratings.get('theory', 0) or None,
-                ratings.get('practice', 0) or None,
-                ratings.get('homework', 0) or None,
-                comment or None,
-                stu_no,
-                course_name
-            )
-        else:
-            # 插入新评分
-            insert_sql = """
-                INSERT INTO COURSE_DIFFICULTY_RATING 
-                (STU_NO, COURSE_NAME, OVERALL_RATING, THEORY_RATING, PRACTICE_RATING, 
-                 HOMEWORK_RATING, COMMENT, CREATE_TIME, UPDATE_TIME)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
-            """
-            params = (
-                stu_no,
-                course_name,
-                ratings.get('overall', 0) or None,
-                ratings.get('theory', 0) or None,
-                ratings.get('practice', 0) or None,
-                ratings.get('homework', 0) or None,
-                comment or None
-            )
-        
-        # 执行SQL（这里需要实际的数据库操作，暂时模拟成功）
-        print(f"难度评分提交: 学生={stu_no}, 课程={course_name}, 评分={ratings}, 评论={comment}")
-        
-        return jsonify({
-            "success": True,
-            "message": "评分提交成功"
-        })
-        
-    except Exception as e:
-        print(f"提交难度评分错误: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": "提交评分失败"}), 500
-
-@app.route('/api/get_difficulty_stats', methods=['GET'])
-def api_get_difficulty_stats():
-    """
-    获取课程难度评分统计
-    """
-    try:
-        course_name = request.args.get('courseName', '').strip()
-        if not course_name:
-            return jsonify({"error": "课程名称不能为空"}), 400
-        
-        # 查询评分统计（这里模拟数据，实际应该查询数据库）
-        print(f"查询课程难度统计: {course_name}")
-        
-        # 模拟统计数据
-        mock_stats = {
-            "overall": {"avg": 3.2, "count": 15, "distribution": [1, 2, 6, 4, 2]},
-            "theory": {"avg": 3.8, "count": 15, "distribution": [0, 1, 3, 8, 3]},
-            "practice": {"avg": 2.9, "count": 15, "distribution": [2, 3, 5, 3, 2]},
-            "homework": {"avg": 3.5, "count": 15, "distribution": [1, 1, 4, 6, 3]}
-        }
-        
-        return jsonify({
-            "success": True,
-            "stats": mock_stats
-        })
-        
-    except Exception as e:
-        print(f"获取难度统计错误: {str(e)}")
-        return jsonify({"error": "获取统计数据失败"}), 500
-
 @app.route('/personal_information', methods=['GET', 'POST'])
 @app.route('/personal_information/<section>', methods=['GET', 'POST'])
 def personal_information(section=None):
@@ -718,9 +560,15 @@ def course_selection():
     available_courses = get_available_elective_courses(stu_no)
     chosen_courses = get_student_chosen_courses(stu_no)
     
+    # 获取所有学院列表（用于筛选）
+    sql = "SELECT DISTINCT COLLEGE FROM EDUCATION_PLAN WHERE COLLEGE IS NOT NULL AND COLLEGE != '' ORDER BY COLLEGE"
+    colleges_result = query.query(sql)
+    colleges = [row[0] for row in colleges_result] if colleges_result else []
+    
     return render_template('course_selection.html', 
                          available_courses=available_courses,
-                         chosen_courses=chosen_courses)
+                         chosen_courses=chosen_courses,
+                         colleges=colleges)
 
 
 @app.route('/api/select_course', methods=['POST'])
@@ -797,6 +645,66 @@ def api_get_course_statistics():
         })
     
     return jsonify(result)
+
+
+@app.route('/api/get_selection_statistics', methods=['GET'])
+def api_get_selection_statistics():
+    """
+    API: 获取选课统计信息
+    包括：已选课程数、已修学分、时间冲突检测
+    """
+    stu_no = session.get('stu_id')
+    if not stu_no:
+        return jsonify({"success": False, "message": "用户未登录"}), 401
+    
+    try:
+        # 获取已选课程数
+        sql = "SELECT COUNT(*) FROM CHOOSE WHERE STU_NO='%s'" % stu_no
+        course_count_result = query.query(sql)
+        selected_count = course_count_result[0][0] if course_count_result else 0
+        
+        # 获取已修学分（总学分，包括已完成和未完成的）
+        sql = """
+            SELECT SUM(e.CREDITS) as total_credits
+            FROM CHOOSE c
+            JOIN EDUCATION_PLAN e ON c.CO_NO = e.CO_NO
+            WHERE c.STU_NO = '%s'
+        """ % stu_no
+        credits_result = query.query(sql)
+        total_credits = float(credits_result[0][0]) if credits_result and credits_result[0][0] else 0.0
+        
+        # 检测时间冲突（简化处理：检查是否有相同上课时间的课程）
+        sql = """
+            SELECT e.CLASS_TIME, COUNT(*) as count
+            FROM CHOOSE c
+            JOIN EDUCATION_PLAN e ON c.CO_NO = e.CO_NO
+            WHERE c.STU_NO = '%s'
+            AND e.CLASS_TIME IS NOT NULL
+            AND e.CLASS_TIME != ''
+            AND e.CLASS_TIME != '未定'
+            GROUP BY e.CLASS_TIME
+            HAVING COUNT(*) > 1
+        """ % stu_no
+        conflicts_result = query.query(sql)
+        time_conflicts = []
+        if conflicts_result:
+            for conflict in conflicts_result:
+                time_conflicts.append({
+                    'class_time': conflict[0],
+                    'count': conflict[1]
+                })
+        
+        statistics = {
+            'selected_count': selected_count,
+            'total_credits': round(total_credits, 1),
+            'time_conflicts': time_conflicts
+        }
+        
+        return jsonify({"success": True, "data": statistics})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"获取统计信息失败: {str(e)}"}), 500
 
 
 @app.route('/inbox', methods=['GET'])
@@ -1294,22 +1202,16 @@ def api_get_learning_statistics():
         """ % stu_no
         unfinished_result = query.query(sql)
         unfinished_courses = unfinished_result[0][0] if unfinished_result else 0
-
-        # 完成课程数
-        completed_courses = max(0, current_semester_courses - unfinished_courses)
-
-        # 课程进度 = 已完成课程数 / 本学期课程总数
-        if current_semester_courses > 0:
-            total_progress = round(completed_courses / current_semester_courses * 100, 1)
-        else:
-            total_progress = 0
+        
+        # 获取课程进度概览
+        progress_data = query.get_student_progress(stu_no)
+        total_progress = progress_data.get('总进度', {}).get('percentage', 0) if progress_data else 0
         
         statistics = {
             'current_semester_courses': current_semester_courses,
             'finished_credits': round(finished_credits, 1),
             'total_credits': round(total_credits, 1),
             'unfinished_courses': unfinished_courses,
-            'completed_courses': completed_courses,
             'total_progress': round(total_progress, 1)
         }
         
@@ -1331,40 +1233,54 @@ def api_update_personal_info():
         
     try:
         data = request.get_json()
-        name = data.get('name')
-        college = data.get('college')
-        major = data.get('major')
-        sex = data.get('sex')
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+            
+        name = data.get('name', '').strip()
+        college = data.get('college', '').strip()
+        major = data.get('major', '').strip()
+        sex = data.get('sex', '').strip()
         
-        # 获取当前信息，如果字段为空则保留原值
+        print(f"[DEBUG] 更新个人信息 - 学号: {stu_no}, 数据: {data}")
+        
+        # 验证必填字段
+        if not name:
+            return jsonify({"success": False, "message": "姓名不能为空"}), 400
+        if not college:
+            return jsonify({"success": False, "message": "学院不能为空"}), 400
+        if not major:
+            return jsonify({"success": False, "message": "专业不能为空"}), 400
+        if not sex:
+            return jsonify({"success": False, "message": "性别不能为空"}), 400
+        
+        # 获取当前信息，验证学生是否存在
         sql = "SELECT NAME, SEX, COLLEGE, MAJOR FROM STUDENT WHERE STU_NO='%s'" % stu_no
         current_info = query.query(sql)
         if not current_info:
             return jsonify({"success": False, "message": "学生信息不存在"}), 404
         
-        current_name, current_sex, current_college, current_major = current_info[0]
-        
-        # 如果字段为空，使用原值
-        if not name:
-            name = current_name
-        if not college:
-            college = current_college
-        if not major:
-            major = current_major
-        if not sex:
-            sex = current_sex
+        # 转义SQL中的单引号（防止SQL注入）
+        name_escaped = name.replace("'", "''")
+        sex_escaped = sex.replace("'", "''")
+        college_escaped = college.replace("'", "''")
+        major_escaped = major.replace("'", "''")
         
         # 更新数据库
         sql = "UPDATE STUDENT SET NAME='%s', SEX='%s', COLLEGE='%s', MAJOR='%s' WHERE STU_NO='%s'" % (
-            name, sex, college, major, stu_no
+            name_escaped, sex_escaped, college_escaped, major_escaped, stu_no
         )
+        print(f"[DEBUG] 执行SQL: {sql}")
+        
         query.update(sql)
         
+        print(f"[DEBUG] 更新成功 - 学号: {stu_no}")
         return jsonify({"success": True, "message": "个人信息更新成功"})
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"更新失败: {str(e)}"}), 500
+        error_msg = f"更新失败: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        return jsonify({"success": False, "message": error_msg}), 500
 
 
 @app.route('/api/upload_avatar', methods=['POST'])
@@ -1547,9 +1463,11 @@ def api_get_filtered_courses():
         if college:
             sql += " AND e.COLLEGE = '%s'" % college
 
-        # 关键词匹配课程名或课程号
+        # 关键词匹配课程名或课程号（支持模糊搜索）
         if keyword:
-            sql += " AND (e.CO_NAME LIKE '%%%s%%' OR e.CO_NO LIKE '%%%s%%')" % (keyword, keyword)
+            # 转义SQL中的特殊字符
+            keyword_escaped = keyword.replace("'", "''").replace("%", "\\%").replace("_", "\\_")
+            sql += " AND (e.CO_NAME LIKE '%%%s%%' OR e.CO_NO LIKE '%%%s%%')" % (keyword_escaped, keyword_escaped)
 
         # 学分范围
         if credits_min:
@@ -1705,106 +1623,22 @@ def api_get_course_records():
         return jsonify({"success": False, "message": f"获取课程记录失败: {str(e)}"}), 500
 
 
-@app.route('/debug_api')
-def debug_api():
-    """API调试页面"""
-    return render_template('debug_api.html')
-
-
-@app.route('/api/test_topics', methods=['GET'])
-def api_test_topics():
-    """简化的测试API"""
-    try:
-        # 简单返回一些测试数据
-        test_data = {
-            "success": True,
-            "data": [
-                {
-                    "news_id": "test1",
-                    "topic": "测试话题1",
-                    "content": "这是一个测试话题的内容...",
-                    "commenter": "测试用户",
-                    "create_time": "2025-12-25 10:00:00",
-                    "reply_count": 2,
-                    "view_count": 15,
-                    "tags": ["最新"]
-                },
-                {
-                    "news_id": "test2", 
-                    "topic": "测试话题2",
-                    "content": "这是另一个测试话题的内容...",
-                    "commenter": "测试用户2",
-                    "create_time": "2025-12-25 09:30:00",
-                    "reply_count": 0,
-                    "view_count": 8,
-                    "tags": []
-                }
-            ],
-            "pagination": {
-                "page": 1,
-                "per_page": 10,
-                "total": 2,
-                "pages": 1
-            }
-        }
-        return jsonify(test_data)
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
-
-@app.route('/jquery_test')
-def jquery_test():
-    """jQuery兼容性测试页面"""
-    return render_template('jquery_test.html')
-
-
-@app.route('/course_discussion_simple')
-def course_discussion_simple():
-    """简化版发布话题页面"""
-    return render_template('course_discussion_simple.html')
-
-
-@app.route('/test_publish_success')
-def test_publish_success():
-    """测试发布成功消息页面"""
-    return render_template('test_publish_success.html')
-
-
-@app.route('/news_center_simple')
-def news_center_simple():
-    """简化版课程论坛页面"""
-    return render_template('news_center_simple.html')
-
-
-@app.route('/forum_debug')
-def forum_debug():
-    """论坛调试页面"""
-    return render_template('forum_debug.html')
-
-
-@app.route('/test_forum_debug')
-def test_forum_debug():
-    """测试论坛调试页面"""
-    return render_template('test_forum_debug.html')
-
-
 @app.route('/api/get_discussion_topics', methods=['GET'])
 def api_get_discussion_topics():
     """
     API: 获取讨论话题列表
     支持排序和筛选
     """
-    # 临时移除登录检查来调试
-    stu_no = session.get('stu_id')  # 恢复正常的登录检查
-    
+    stu_no = session.get('stu_id')
+    if not stu_no:
+        return jsonify({"success": False, "message": "用户未登录"}), 401
+        
     try:
         # 获取参数
         sort_by = request.args.get('sort_by', 'latest')  # latest, replies, my_participation
         filter_type = request.args.get('filter', 'all')  # all, my_topics, hot
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10))
-        
-        print(f"API调用参数: sort_by={sort_by}, filter={filter_type}, page={page}, stu_no={stu_no}")  # 调试日志
         
         # 构建查询
         # 筛选条件
@@ -1854,11 +1688,8 @@ def api_get_discussion_topics():
                 %s
             """ % (filter_condition, order_by)
         
-        print(f"执行SQL: {sql}")  # 调试日志
-        
         # 执行查询
         all_topics = query.query(sql)
-        print(f"查询结果: {len(all_topics)} 个话题")  # 调试日志
         
         # 分页
         total = len(all_topics)
@@ -1888,9 +1719,22 @@ def api_get_discussion_topics():
                 except:
                     pass
             
+            # 检查是否有教师回复（简化处理，假设教师名字包含"老师"）
+            check_teacher_sql = """
+                SELECT COUNT(*) FROM NEWS 
+                WHERE IS_FIRST = '%s' 
+                AND (COMMENTER LIKE '%%老师%%' OR COMMENTER LIKE '%%教授%%')
+            """ % news_id
+            teacher_replies = query.query(check_teacher_sql)
+            if teacher_replies and teacher_replies[0][0] > 0:
+                tags.append('教师回复')
+            
             # 热门标签（回复数>=5）
             if reply_count >= 5:
                 tags.append('热门')
+            
+            # 置顶标签（简化处理，可以根据实际需求添加置顶字段）
+            # tags.append('置顶')  # 暂时不实现
             
             topics_list.append({
                 'news_id': news_id,
@@ -1903,7 +1747,7 @@ def api_get_discussion_topics():
                 'tags': tags
             })
         
-        result = {
+        return jsonify({
             "success": True,
             "data": topics_list,
             "pagination": {
@@ -1912,15 +1756,10 @@ def api_get_discussion_topics():
                 "total": total,
                 "pages": (total + per_page - 1) // per_page
             }
-        }
-        
-        print(f"返回结果: {len(topics_list)} 个话题")  # 调试日志
-        return jsonify(result)
-        
+        })
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"API错误: {str(e)}")  # 调试日志
         return jsonify({"success": False, "message": f"获取话题列表失败: {str(e)}"}), 500
 
 

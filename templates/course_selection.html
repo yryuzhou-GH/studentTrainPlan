@@ -70,14 +70,71 @@
                     <button class="search_btn" id="search-btn">🔍 搜索</button>
                 </div>
             </div>
+            
+            <!-- 课程详情卡片（搜索结果只有1门时显示） -->
+            <div id="course-detail-card" class="course_detail_card" style="display: none;">
+                <div class="detail_card_header">
+                    <h3 class="detail_card_title">课程详情</h3>
+                    <span class="detail_card_close" onclick="$('#course-detail-card').fadeOut(200);">&times;</span>
+                </div>
+                <div class="detail_card_body">
+                    <div class="course_detail_info">
+                        <div class="detail_row">
+                            <div class="detail_label">课程编号：</div>
+                            <div class="detail_value" id="detail-co-no">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">课程名称：</div>
+                            <div class="detail_value course_name" id="detail-co-name">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">课程类型：</div>
+                            <div class="detail_value" id="detail-classification">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">学分：</div>
+                            <div class="detail_value" id="detail-credits">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">授课教师：</div>
+                            <div class="detail_value" id="detail-teacher">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">上课时间：</div>
+                            <div class="detail_value" id="detail-class-time">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">课程容量：</div>
+                            <div class="detail_value" id="detail-capacity">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">开课学院：</div>
+                            <div class="detail_value" id="detail-college">-</div>
+                        </div>
+                        <div class="detail_row">
+                            <div class="detail_label">课程状态：</div>
+                            <div class="detail_value" id="detail-status">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="detail_card_footer">
+                    <button type="button" class="btn_cancel" onclick="$('#course-detail-card').fadeOut(200);">关闭</button>
+                    <button type="button" class="btn_submit" id="detail-select-btn" style="display: none;" onclick="selectCourseFromDetail();">立即选课</button>
+                </div>
+            </div>
             <div class="filter_row">
                 <div class="filter_group">
                     <label class="filter_label">学院：</label>
                     <select id="filter-college" class="filter_select">
                         <option value="">全部学院</option>
+                        <option value="智能与计算学部" selected>智能与计算学部</option>
+                        {% if colleges %}
                         {% for college in colleges %}
+                        {% if college != '智能与计算学部' %}
                         <option value="{{ college }}">{{ college }}</option>
+                        {% endif %}
                         {% endfor %}
+                        {% endif %}
                     </select>
                 </div>
                 <div class="filter_group">
@@ -295,6 +352,15 @@
             var creditsMax = $("#filter-credits-max").val();
             var classTime = $("#filter-class-time").val();
             
+            console.log("[DEBUG] 搜索参数:", {
+                keyword: keyword,
+                college: college,
+                course_type: courseType,
+                credits_min: creditsMin,
+                credits_max: creditsMax,
+                class_time: classTime
+            });
+            
             // 显示加载状态
             $("#available-courses-body").html('<tr><td colspan="10" class="loading_cell">加载中...</td></tr>');
             
@@ -310,14 +376,37 @@
                     class_time: classTime
                 },
                 success: function(res) {
+                    console.log("[DEBUG] 搜索结果:", res);
                     if (res.success && res.data) {
                         renderAvailableCourses(res.data);
+                        // 如果有搜索关键词，显示搜索结果提示
+                        if (keyword) {
+                            var count = res.data.length;
+                            if (count === 0) {
+                                showMessage("未找到匹配的课程", false);
+                            } else if (count === 1) {
+                                showMessage("找到 1 门课程，已自动弹出详情", true);
+                            } else {
+                                showMessage("找到 " + count + " 门课程", true);
+                            }
+                        }
                     } else {
                         $("#available-courses-body").html('<tr><td colspan="10" class="empty_cell">加载失败，请刷新重试</td></tr>');
+                        showMessage("加载失败，请刷新重试", false);
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
+                    console.error("[ERROR] 搜索失败:", {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        error: error
+                    });
                     $("#available-courses-body").html('<tr><td colspan="10" class="empty_cell">加载失败，请刷新重试</td></tr>');
+                    var errorMsg = "搜索失败，请稍后重试";
+                    if (xhr.status === 401) {
+                        errorMsg = "用户未登录，请重新登录";
+                    }
+                    showMessage(errorMsg, false);
                 }
             });
         }
@@ -327,7 +416,17 @@
             if (courses.length === 0) {
                 $("#available-courses-body").html('<tr><td colspan="10" class="empty_cell">没有符合条件的课程</td></tr>');
                 $("#available-count").text("(0)");
+                // 隐藏课程详情卡片
+                $("#course-detail-card").fadeOut(200);
                 return;
+            }
+            
+            // 如果只找到1门课程，在搜索框下方显示课程详情
+            if (courses.length === 1) {
+                showCourseDetailCard(courses[0]);
+            } else {
+                // 多门课程时隐藏详情卡片
+                $("#course-detail-card").fadeOut(200);
             }
             
             var html = '';
@@ -368,16 +467,78 @@
             $("#available-courses-body").html(html);
             $("#available-count").text("(" + courses.length + ")");
         }
+        
+        // 显示课程详情卡片（在搜索框下方）
+        function showCourseDetailCard(course) {
+            var capacityText = '';
+            if (course.max_students > 0) {
+                capacityText = course.current_students + ' / ' + course.max_students + ' 人';
+            } else {
+                capacityText = '不限';
+            }
+            
+            var statusClass = 'status_' + course.status;
+            var statusText = course.status_text;
+            var canSelect = course.status === 'available';
+            
+            // 填充课程详情信息
+            $("#detail-co-no").text(course.co_no);
+            $("#detail-co-name").text(course.co_name);
+            $("#detail-classification").text(course.classification);
+            $("#detail-credits").text(course.credits + ' 学分');
+            $("#detail-teacher").text(course.teacher || '待定');
+            $("#detail-class-time").text(course.class_time || '待定');
+            $("#detail-capacity").text(capacityText);
+            $("#detail-college").text(course.college || '未知');
+            $("#detail-status").html('<span class="status_badge ' + statusClass + '">' + statusText + '</span>');
+            
+            // 保存课程信息到按钮，用于选课
+            $("#detail-select-btn").data('co-no', course.co_no).data('co-name', course.co_name);
+            
+            // 显示/隐藏选课按钮
+            if (canSelect) {
+                $("#detail-select-btn").show();
+            } else {
+                $("#detail-select-btn").hide();
+            }
+            
+            // 显示详情卡片
+            $("#course-detail-card").fadeIn(200);
+        }
+        
+        // 从详情卡片选课
+        window.selectCourseFromDetail = function() {
+            var coNo = $("#detail-select-btn").data('co-no');
+            var coName = $("#detail-select-btn").data('co-name');
+            if (coNo && coName) {
+                selectCourse(coNo, coName);
+            }
+        };
 
         // 搜索按钮点击
-        $("#search-btn").click(function() {
+        $("#search-btn").click(function(e) {
+            e.preventDefault();
             applyFilters();
         });
 
         // 回车搜索
         $("#search-keyword").keypress(function(e) {
             if (e.which == 13) {
+                e.preventDefault();
                 applyFilters();
+            }
+        });
+        
+        // 实时搜索（可选：输入时延迟搜索）
+        var searchTimeout;
+        $("#search-keyword").on("input", function() {
+            clearTimeout(searchTimeout);
+            var keyword = $(this).val().trim();
+            // 如果输入为空，显示所有课程
+            if (keyword === '') {
+                searchTimeout = setTimeout(function() {
+                    applyFilters();
+                }, 300);
             }
         });
 
@@ -392,7 +553,8 @@
         });
 
         // 重置筛选
-        $("#reset-filters-btn").click(function() {
+        $("#reset-filters-btn").click(function(e) {
+            e.preventDefault();
             $("#search-keyword").val("");
             $("#filter-college").val("");
             $("#filter-course-type").val("");
@@ -824,6 +986,91 @@
     .message_toast.error {
         background: #f5222d;
         color: #fff;
+    }
+
+    /* 课程详情卡片（搜索框下方） */
+    .course_detail_card {
+        margin-top: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border: 2px solid #003d79;
+        overflow: hidden;
+    }
+
+    .detail_card_header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        background: linear-gradient(135deg, #003d79 0%, #0056b3 100%);
+        color: #fff;
+    }
+
+    .detail_card_title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+    }
+
+    .detail_card_close {
+        color: #fff;
+        font-size: 24px;
+        font-weight: bold;
+        cursor: pointer;
+        line-height: 1;
+        transition: transform 0.2s;
+    }
+
+    .detail_card_close:hover {
+        transform: rotate(90deg);
+    }
+
+    .detail_card_body {
+        padding: 20px;
+    }
+
+    .course_detail_info {
+        padding: 0;
+    }
+
+    .detail_row {
+        display: flex;
+        padding: 12px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .detail_row:last-child {
+        border-bottom: none;
+    }
+
+    .detail_label {
+        width: 120px;
+        font-weight: 600;
+        color: #666;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    .detail_value {
+        flex: 1;
+        color: #333;
+        font-size: 14px;
+    }
+
+    .course_name {
+        font-size: 16px;
+        font-weight: 600;
+        color: #003d79;
+    }
+
+    .detail_card_footer {
+        padding: 15px 20px;
+        border-top: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        background: #f9fafb;
     }
 
     /* 响应式设计 */

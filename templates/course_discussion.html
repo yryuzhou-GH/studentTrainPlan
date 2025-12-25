@@ -4,7 +4,8 @@
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <link href="{{ url_for('static', filename='css/style1.css') }}" rel="stylesheet" type="text/css" />
 <link rel="icon" href="{{ url_for('static', filename='images/logo.ico') }}" type="image/x-icon"/>
-<script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+<script src="{{ url_for('static', filename='js/jquery1.42.min.js') }}" type="text/javascript"></script>
+<script src="{{ url_for('static', filename='js/jquery.js') }}"></script>
 <title>发布话题</title>
 </head>
 
@@ -141,32 +142,11 @@ $(function() {
             }),
             success: function(response) {
                 if (response.success) {
-                    // 重置按钮状态
-                    submitBtn.prop("disabled", false).text("发布话题");
-                    
-                    // 显示大型成功消息
-                    console.log("准备显示成功消息");
-                    try {
-                        showSuccessModal("话题发布成功！", "您的话题已成功发布，即将跳转到课程论坛查看。");
-                        console.log("成功消息已调用");
-                    } catch (e) {
-                        console.error("显示成功消息时出错:", e);
-                        alert("话题发布成功！即将跳转到课程论坛。");
-                        setTimeout(function() {
-                            window.location.href = "/news_center?published=success";
-                        }, 2000);
-                    }
-                    
-                    // 清空表单
-                    $("#topic-title").val("");
-                    $("#topic-content").val("");
-                    $("#char-count").text("0");
-                    formChanged = false;
-                    
-                    // 延迟跳转到论坛页面
+                    showNotification(response.message || "话题发布成功！", "success");
+                    // 延迟跳转，让用户看到成功提示
                     setTimeout(function() {
-                        window.location.href = "/news_center?published=success";
-                    }, 3000);
+                        window.location.href = "{{ url_for('news_center') }}";
+                    }, 1500);
                 } else {
                     showNotification(response.message || "发布失败，请稍后重试", "error");
                     submitBtn.prop("disabled", false).text("发布话题");
@@ -197,64 +177,6 @@ $(function() {
         });
     });
     
-    // 显示成功模态框
-    function showSuccessModal(title, message) {
-        console.log("showSuccessModal被调用:", title, message);
-        
-        var modal = $('<div class="success_modal_overlay">' +
-            '<div class="success_modal">' +
-                '<div class="success_modal_icon">' +
-                    '<div class="success_checkmark">' +
-                        '<div class="check_icon">' +
-                            '<span class="icon_line line_tip"></span>' +
-                            '<span class="icon_line line_long"></span>' +
-                            '<div class="icon_circle"></div>' +
-                            '<div class="icon_fix"></div>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="success_modal_content">' +
-                    '<h3 class="success_modal_title">' + title + '</h3>' +
-                    '<p class="success_modal_message">' + message + '</p>' +
-                    '<div class="success_modal_countdown">' +
-                        '<span id="countdown">3</span> 秒后自动跳转...' +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-        '</div>');
-        
-        $("body").append(modal);
-        console.log("模态框已添加到页面");
-        
-        // 显示动画
-        setTimeout(function() {
-            modal.addClass("show");
-            console.log("模态框显示动画已触发");
-        }, 10);
-        
-        // 倒计时
-        var countdown = 3;
-        var countdownInterval = setInterval(function() {
-            countdown--;
-            modal.find("#countdown").text(countdown);
-            console.log("倒计时:", countdown);
-            if (countdown <= 0) {
-                clearInterval(countdownInterval);
-            }
-        }, 1000);
-        
-        // 点击遮罩关闭（可选）
-        modal.click(function(e) {
-            if (e.target === modal[0]) {
-                modal.removeClass("show");
-                setTimeout(function() {
-                    modal.remove();
-                    clearInterval(countdownInterval);
-                }, 300);
-            }
-        });
-    }
-    
     // 显示通知函数
     function showNotification(message, type) {
         type = type || "info";
@@ -265,15 +187,12 @@ $(function() {
             notification.addClass("show");
         }, 10);
         
-        // 成功消息显示更久
-        var displayTime = type === 'success' ? 4000 : 3000;
-        
         setTimeout(function() {
             notification.removeClass("show");
             setTimeout(function() {
                 notification.remove();
-            }, 400);
-        }, displayTime);
+            }, 300);
+        }, 3000);
     }
     
     // 页面离开前提示
@@ -435,252 +354,20 @@ $(function() {
     cursor: not-allowed;
 }
 
-/* 成功模态框 */
-.success_modal_overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.success_modal_overlay.show {
-    opacity: 1;
-}
-
-.success_modal {
-    background: #fff;
-    border-radius: 12px;
-    padding: 40px;
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    transform: scale(0.7);
-    transition: transform 0.3s ease;
-}
-
-.success_modal_overlay.show .success_modal {
-    transform: scale(1);
-}
-
-.success_modal_icon {
-    margin-bottom: 20px;
-}
-
-.success_checkmark {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    display: block;
-    stroke-width: 2;
-    stroke: #4CAF50;
-    stroke-miterlimit: 10;
-    margin: 0 auto;
-    box-shadow: inset 0px 0px 0px #4CAF50;
-    animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
-    position: relative;
-}
-
-.success_checkmark .check_icon {
-    width: 80px;
-    height: 80px;
-    position: relative;
-    border-radius: 50%;
-    box-sizing: border-box;
-    border: 2px solid #4CAF50;
-}
-
-.success_checkmark .check_icon::before {
-    top: 3px;
-    left: -2px;
-    width: 30px;
-    transform-origin: 100% 50%;
-    border-radius: 100px 0 0 100px;
-}
-
-.success_checkmark .check_icon::after {
-    top: 0;
-    left: 30px;
-    width: 60px;
-    transform-origin: 0 50%;
-    border-radius: 0 100px 100px 0;
-    animation: rotate-circle 4.25s ease-in;
-}
-
-.success_checkmark .check_icon::before,
-.success_checkmark .check_icon::after {
-    content: '';
-    height: 100px;
-    position: absolute;
-    background: #FFFFFF;
-    transform: rotate(-45deg);
-}
-
-.success_checkmark .icon_line {
-    height: 2px;
-    background: #4CAF50;
-    display: block;
-    border-radius: 2px;
-    position: absolute;
-    z-index: 10;
-}
-
-.success_checkmark .icon_line.line_tip {
-    top: 46px;
-    left: 14px;
-    width: 25px;
-    transform: rotate(45deg);
-    animation: icon-line-tip 0.75s;
-}
-
-.success_checkmark .icon_line.line_long {
-    top: 38px;
-    right: 8px;
-    width: 47px;
-    transform: rotate(-45deg);
-    animation: icon-line-long 0.75s;
-}
-
-.success_checkmark .icon_circle {
-    top: -2px;
-    left: -2px;
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: 2px solid #4CAF50;
-    position: absolute;
-    z-index: 10;
-    box-sizing: content-box;
-}
-
-.success_checkmark .icon_fix {
-    top: 8px;
-    width: 5px;
-    left: 26px;
-    z-index: 1;
-    height: 85px;
-    position: absolute;
-    transform: rotate(-45deg);
-    background-color: #FFFFFF;
-}
-
-@keyframes rotate-circle {
-    0% {
-        transform: rotate(-45deg);
-    }
-    5% {
-        transform: rotate(-45deg);
-    }
-    12% {
-        transform: rotate(-405deg);
-    }
-    100% {
-        transform: rotate(-405deg);
-    }
-}
-
-@keyframes icon-line-tip {
-    0% {
-        width: 0;
-        left: 1px;
-        top: 19px;
-    }
-    54% {
-        width: 0;
-        left: 1px;
-        top: 19px;
-    }
-    70% {
-        width: 50px;
-        left: -8px;
-        top: 37px;
-    }
-    84% {
-        width: 17px;
-        left: 21px;
-        top: 48px;
-    }
-    100% {
-        width: 25px;
-        left: 14px;
-        top: 45px;
-    }
-}
-
-@keyframes icon-line-long {
-    0% {
-        width: 0;
-        right: 46px;
-        top: 54px;
-    }
-    65% {
-        width: 0;
-        right: 46px;
-        top: 54px;
-    }
-    84% {
-        width: 55px;
-        right: 0px;
-        top: 35px;
-    }
-    100% {
-        width: 47px;
-        right: 8px;
-        top: 38px;
-    }
-}
-
-.success_modal_title {
-    color: #4CAF50;
-    font-size: 24px;
-    font-weight: 600;
-    margin: 0 0 10px 0;
-}
-
-.success_modal_message {
-    color: #666;
-    font-size: 16px;
-    line-height: 1.5;
-    margin: 0 0 20px 0;
-}
-
-.success_modal_countdown {
-    color: #999;
-    font-size: 14px;
-}
-
-.success_modal_countdown span {
-    color: #4CAF50;
-    font-weight: 600;
-}
-
 /* 通知样式 */
 .notification {
     position: fixed;
     top: 20px;
     right: 20px;
-    padding: 16px 24px;
-    border-radius: 8px;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    padding: 15px 20px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     z-index: 10001;
-    min-width: 280px;
-    max-width: 400px;
+    min-width: 250px;
     opacity: 0;
     transform: translateX(100%);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s ease;
     font-size: 14px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
 }
 
 .notification.show {
@@ -689,27 +376,23 @@ $(function() {
 }
 
 .notification-success {
-    background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+    background: #52c41a;
     color: #fff;
-    border-left: 4px solid #389e0d;
 }
 
 .notification-error {
-    background: linear-gradient(135deg, #f5222d 0%, #ff4d4f 100%);
+    background: #f5222d;
     color: #fff;
-    border-left: 4px solid #cf1322;
 }
 
 .notification-warning {
-    background: linear-gradient(135deg, #faad14 0%, #ffc53d 100%);
+    background: #faad14;
     color: #fff;
-    border-left: 4px solid #d48806;
 }
 
 .notification-info {
-    background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+    background: #1890ff;
     color: #fff;
-    border-left: 4px solid #096dd9;
 }
 
 /* 响应式设计 */
