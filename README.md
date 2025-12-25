@@ -125,6 +125,11 @@ SOURCE sql/insert_edu_stu_plan.sql;
 
 # 创建课程难度评分表（新功能）
 SOURCE sql/create_difficulty_rating_table.sql;
+
+# 创建公告相关表（管理员发布公告功能）
+SOURCE sql/create_announcement_tables.sql;
+# 或者运行Python脚本初始化
+# python init_announcement_tables.py
 ```
 
 > ⚠️ **常见问题解决**：
@@ -276,7 +281,10 @@ studentTrainPlan/
 │   ├── insert_choose.sql     # 选课记录数据
 │   ├── insert_edu_stu_plan.sql   # 学生培养计划数据
 │   ├── insert_loginformation.sql # 登录日志数据
-│   └── create_difficulty_rating_table.sql  # 课程难度评分表
+│   ├── create_difficulty_rating_table.sql  # 课程难度评分表
+│   └── create_announcement_tables.sql  # 公告相关表
+├── init_announcement_tables.py  # 公告表初始化脚本
+├── check_ai_assistant.py     # AI助手诊断脚本
 ├── exampleImage/              # 示例截图
 │   ├── index.png             # 首页截图
 │   ├── recommend.png         # 推荐页截图
@@ -434,6 +442,11 @@ studentTrainPlan/
 - 需要网络连接访问DeepSeek API
 - 可选功能，不影响其他模块使用
 
+**诊断工具**：
+- 运行 `python check_ai_assistant.py` 检查AI助手配置
+- 脚本会自动检测环境变量、库安装和API连接
+- 提供详细的错误诊断和解决建议
+
 ---
 
 ### 5. 📈 课程进度管理
@@ -539,10 +552,25 @@ studentTrainPlan/
 **访问路径**：`/manager`（管理员登录后）
 
 **管理功能**：
-- **学生管理**：增加、删除、编辑学生信息
-- **公告管理**：发布系统公告和课程通知
+- **学生管理**：
+  - 增加学生：添加新学生信息（`/managerAdd`）
+  - 删除学生：删除学生记录（`/managerDelete`）
+  - 编辑学生：修改学生信息（`/managerEdit`）
+  - 学生列表：查看所有学生信息
+- **公告管理**：
+  - 发布公告：创建系统公告和课程通知（`/managerBroadcast`）
+  - 精准推送：支持按学生、学院、专业定向推送
+  - 可见性控制：灵活的公告可见性规则
+  - 自动表创建：系统自动检测并创建公告相关表
 - **数据统计**：查看系统使用统计数据
 - **系统维护**：数据库维护和系统配置
+
+**公告发布功能特点**：
+- **多目标选择**：支持同时选择学生、学院、专业作为推送目标
+- **自动表管理**：首次使用时自动创建公告表和可见性表
+- **错误处理**：完善的错误提示和处理机制
+- **数据验证**：标题和内容必填验证
+- **时间记录**：自动记录发布时间
 
 ## 🔌 API 接口文档
 
@@ -648,10 +676,12 @@ mysql -u root -p studenttrainplan < sql/schema.sql
 **Q: AI助手无响应或报错？**
 
 A: 检查步骤：
-1. **API密钥**：确认已正确设置 `DEEPSEEK_API_KEY` 环境变量
-2. **网络连接**：确保服务器能访问外网
-3. **API额度**：检查DeepSeek账户是否有可用额度
-4. **重启应用**：修改环境变量后需要重启Flask应用
+1. **运行诊断脚本**：首先运行 `python check_ai_assistant.py` 进行自动诊断
+2. **API密钥**：确认已正确设置 `DEEPSEEK_API_KEY` 环境变量
+3. **网络连接**：确保服务器能访问外网
+4. **API额度**：检查DeepSeek账户是否有可用额度
+5. **重启应用**：修改环境变量后需要重启Flask应用
+6. **查看错误信息**：现在错误信息会显示在聊天界面，查看具体错误原因
 
 **Q: 如何获取DeepSeek API密钥？**
 
@@ -939,7 +969,24 @@ CREATE INDEX idx_course_name ON COURSE_DIFFICULTY_RATING(COURSE_NAME);
 
 ## 📝 更新日志
 
-### v3.6 (2024-12-26) - 最新版本
+### v3.7 (2024-12-26) - 最新版本
+- 🔧 **管理员功能完善**
+  - 修复管理员发布公告功能（解决数据库表不存在问题）
+  - 新增公告表自动创建功能（首次使用时自动初始化）
+  - 新增公告表初始化脚本（`init_announcement_tables.py`）
+  - 完善公告发布错误处理和用户提示
+  - 支持按学生、学院、专业精准推送公告
+- 🤖 **AI助手功能改进**
+  - 改进错误处理，显示具体错误信息
+  - 新增AI助手诊断脚本（`check_ai_assistant.py`）
+  - 优化错误消息样式，更易识别
+  - 完善API调用错误处理（API密钥、网络、频率限制等）
+- 🐛 **问题修复**
+  - 修复 `banner_shadow.png` 404错误（注释掉不存在的图片引用）
+  - 修复管理员发布公告时数据库表不存在的问题
+  - 改进前端错误提示，显示详细错误信息
+
+### v3.6 (2024-12-26)
 - 🎯 **选课中心功能增强**
   - 新增单课程搜索自动显示详情功能（搜索到1门课程时，自动在搜索框下方显示详情卡片）
   - 优化学院筛选默认值（默认选中"智能与计算学部"）
@@ -1078,7 +1125,7 @@ CREATE INDEX idx_course_name ON COURSE_DIFFICULTY_RATING(COURSE_NAME);
 
 ## 🔮 未来规划
 
-### 短期计划 (v3.7)
+### 短期计划 (v3.8)
 - [ ] **移动端适配**：优化移动设备访问体验，响应式设计优化
 - [ ] **课程评价系统**：扩展评分功能，支持课程质量评价和文字评价
 - [ ] **学习路径推荐**：基于课程依赖关系的学习路径规划

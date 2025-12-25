@@ -1,0 +1,34 @@
+```mermaid
+flowchart TD
+    Start([用户点击选课按钮]) --> Confirm{确认选课?}
+    Confirm -->|取消| End1([结束])
+    Confirm -->|确认| AJAX["发送AJAX请求<br/>POST /api/select_course"]
+    
+    AJAX --> CheckLogin{检查登录}
+    CheckLogin -->|未登录| Error1[返回401错误]
+    CheckLogin -->|已登录| CheckCourse{课程存在?}
+    
+    CheckCourse -->|不存在| Error2[返回错误]
+    CheckCourse -->|存在| CheckChosen{已选过?}
+    
+    CheckChosen -->|已选| Error3[返回错误]
+    CheckChosen -->|未选| CheckCapacity{容量已满?}
+    
+    CheckCapacity -->|已满| Error4[返回错误]
+    CheckCapacity -->|未满| InsertDB[插入选课记录]
+    
+    InsertDB --> CheckInsert{插入成功?}
+    CheckInsert -->|失败| Error5[返回错误]
+    CheckInsert -->|成功| Success[选课成功]
+    
+    Success --> ShowMsg[显示成功消息]
+    ShowMsg --> Reload[刷新页面]
+    Reload --> End2([完成])
+    
+    Error1 --> ShowError[显示错误消息]
+    Error2 --> ShowError
+    Error3 --> ShowError
+    Error4 --> ShowError
+    Error5 --> ShowError
+    ShowError --> End1
+```

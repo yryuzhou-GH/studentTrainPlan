@@ -514,36 +514,66 @@ def submit_train_place():
 
 @app.route('/api/deepseek_chat', methods=['POST'])
 def deepseek_chat():
-    user_message = request.json.get("message", "")
-
-    if not user_message:
-        return jsonify({"error": "消息不能为空"}), 400
-
-    # 读取 DeepSeek API KEY（你必须提前设置环境变量）
-    api_key = os.environ.get('DEEPSEEK_API_KEY')
-    if not api_key:
-        return jsonify({"error": "未检测到 DEEPSEEK_API_KEY"}), 500
-
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://api.deepseek.com"
-    )
-
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "你是一个课程学习助手，回答简明清晰。"},
-                {"role": "user", "content": user_message}
-            ],
-            stream=False
+        # 检查请求数据
+        if not request.json:
+            return jsonify({"error": "请求数据格式错误，需要JSON格式"}), 400
+            
+        user_message = request.json.get("message", "")
+
+        if not user_message:
+            return jsonify({"error": "消息不能为空"}), 400
+
+        # 读取 DeepSeek API KEY（你必须提前设置环境变量）
+        api_key = os.environ.get('DEEPSEEK_API_KEY')
+        if not api_key:
+            error_msg = "未检测到 DEEPSEEK_API_KEY 环境变量。请设置环境变量后重启应用。"
+            print(f"[AI助手错误] {error_msg}")
+            return jsonify({"error": error_msg}), 500
+
+        # 创建 OpenAI 客户端（使用 DeepSeek API）
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com"
         )
 
-        reply = response.choices[0].message.content
-        return jsonify({"reply": reply})
+        # 调用 DeepSeek API
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": "你是一个课程学习助手，回答简明清晰。"},
+                    {"role": "user", "content": user_message}
+                ],
+                stream=False
+            )
+
+            reply = response.choices[0].message.content
+            return jsonify({"reply": reply})
+
+        except Exception as api_error:
+            # API调用错误
+            error_msg = f"API调用失败: {str(api_error)}"
+            print(f"[AI助手错误] {error_msg}")
+            # 提供更友好的错误提示
+            if "401" in str(api_error) or "Unauthorized" in str(api_error):
+                error_msg = "API密钥无效，请检查 DEEPSEEK_API_KEY 是否正确"
+            elif "429" in str(api_error) or "rate limit" in str(api_error).lower():
+                error_msg = "API调用频率超限，请稍后再试"
+            elif "network" in str(api_error).lower() or "connection" in str(api_error).lower():
+                error_msg = "网络连接失败，请检查网络设置"
+            else:
+                error_msg = f"API错误: {str(api_error)}"
+            
+            return jsonify({"error": error_msg}), 500
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # 其他未预期的错误
+        error_msg = f"服务器错误: {str(e)}"
+        print(f"[AI助手错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": error_msg}), 500
 
 
 @app.route('/course_selection', methods=['GET', 'POST'])
@@ -843,18 +873,35 @@ def managerBroadcast():
     """
     管理员发布公告
     """
-    result = broadcast.handle_broadcast_request(request, session, query)
-    
-    if result.get('status') == 'success':
-        return render_template(result['template'], 
-                             students=result.get('students'),
-                             colleges=result.get('colleges'),
-                             majors=result.get('majors'))
-    elif result.get('status') == 'redirect':
-        flash(result.get('message'), 'success')
-        return redirect(result.get('url'))
-    else:
-        flash(result.get('message'), 'error')
+    try:
+        result = broadcast.handle_broadcast_request(request, session, query)
+        
+        if result.get('status') == 'error':
+            flash(result.get('message', '操作失败'), 'error')
+            # 如果是GET请求或错误，返回模板
+            if request.method == 'GET' or result.get('template'):
+                return render_template(result.get('template', 'managerBroadcast.html'), 
+                                     students=result.get('students', []),
+                                     colleges=result.get('colleges', []),
+                                     majors=result.get('majors', []))
+            else:
+                return redirect(url_for('manager'))
+        
+        if result.get('status') == 'success':
+            return render_template(result['template'], 
+                                 students=result.get('students', []),
+                                 colleges=result.get('colleges', []),
+                                 majors=result.get('majors', []))
+        elif result.get('status') == 'redirect':
+            flash(result.get('message'), 'success')
+            return redirect(result.get('url'))
+        else:
+            flash(result.get('message', '未知错误'), 'error')
+            return redirect(url_for('manager'))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f'发布公告时发生错误: {str(e)}', 'error')
         return redirect(url_for('manager'))
 
 
