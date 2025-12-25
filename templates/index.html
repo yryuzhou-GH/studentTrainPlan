@@ -198,14 +198,37 @@ $(function() {
             contentType: "application/json",
             data: JSON.stringify({ message: text }),
             success: function(res) {
-                $("#chat-messages").append(`
-                    <div class="msg bot-msg">${res.reply}</div>
-                `);
+                if (res.reply) {
+                    $("#chat-messages").append(`
+                        <div class="msg bot-msg">${res.reply}</div>
+                    `);
+                } else if (res.error) {
+                    $("#chat-messages").append(`
+                        <div class="msg bot-msg error-msg">错误：${res.error}</div>
+                    `);
+                } else {
+                    $("#chat-messages").append(`
+                        <div class="msg bot-msg error-msg">未知错误，请稍后再试。</div>
+                    `);
+                }
                 scrollToBottom();
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                var errorMsg = "请求失败，请稍后再试。";
+                
+                // 尝试从响应中获取错误信息
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMsg = "错误：" + xhr.responseJSON.error;
+                } else if (xhr.status === 500) {
+                    errorMsg = "服务器错误：可能是API密钥未配置或网络连接问题。";
+                } else if (xhr.status === 400) {
+                    errorMsg = "请求参数错误。";
+                } else if (xhr.status === 0) {
+                    errorMsg = "网络连接失败，请检查网络设置。";
+                }
+                
                 $("#chat-messages").append(`
-                    <div class="msg bot-msg">请求失败，请稍后再试。</div>
+                    <div class="msg bot-msg error-msg">${errorMsg}</div>
                 `);
                 scrollToBottom();
             }
@@ -465,6 +488,14 @@ $(function() {
 .bot-msg {
     background: #e4e7ed;
     color: #333;
+    margin-right: auto;
+}
+
+/* 错误消息样式 */
+.error-msg {
+    background: #fee;
+    color: #c33;
+    border: 1px solid #fcc;
     margin-right: auto;
 }
 
