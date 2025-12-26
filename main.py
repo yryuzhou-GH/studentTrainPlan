@@ -137,8 +137,8 @@ def course_discussion():
                 return jsonify({"success": False, "message": "用户未登录"}), 401
             return redirect(url_for('login'))
         
-        sql = "select NAME from STUDENT where STU_NO = '%s'" % stu_id
-        stu_name = query.query(sql)
+        sql = "select NAME from STUDENT where STU_NO = %s"
+        stu_name = query.query(sql, (stu_id,))
         if not stu_name:
             if request.is_json:
                 return jsonify({"success": False, "message": "用户信息不存在"}), 404
@@ -149,9 +149,9 @@ def course_discussion():
         now = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))
         news_id = stu_name + str(int(now.replace('-', '').replace(' ', '').replace(':', '')))
         
-        sql = "INSERT INTO NEWS(TOPIC, COMMENTS, COMMENTER, NEWS_ID, IS_FIRST, CREATE_TIME) VALUES ('%s', '%s', '%s', '%s', '0', '%s')" % (topic, comments, stu_name, news_id, now)
-        print(sql)
-        query.update(sql)
+        sql = "INSERT INTO NEWS(TOPIC, COMMENTS, COMMENTER, NEWS_ID, IS_FIRST, CREATE_TIME) VALUES (%s, %s, %s, %s, '0', %s)"
+        #print(sql)
+        query.update(sql, (topic, comments, stu_name, news_id, now))
         
         if request.is_json:
             return jsonify({"success": True, "message": "话题发布成功", "news_id": news_id})
@@ -1688,12 +1688,8 @@ def api_get_discussion_topics():
         per_page = int(request.args.get('per_page', 10))
         
         # 构建查询
-        # 筛选条件
-        filter_condition = ""
-        if filter_type == 'my_topics':
-            filter_condition = " AND n.COMMENTER = (SELECT NAME FROM STUDENT WHERE STU_NO = '%s')" % stu_no
-        elif filter_type == 'hot':
-            filter_condition = " AND (SELECT COUNT(*) FROM NEWS WHERE IS_FIRST = n.NEWS_ID) >= 5"
+        params = []
+        sql = ""
         
         # 排序条件
         order_by = ""
@@ -1705,8 +1701,6 @@ def api_get_discussion_topics():
             # 默认按最新排序
             order_by = " ORDER BY n.CREATE_TIME DESC"
         
-        # 构建SQL查询
-        sql = ""  # 初始化sql变量
         if sort_by == 'my_participation':
             # 我的参与：我发过帖或回复过
             sql = """
@@ -1715,28 +1709,36 @@ def api_get_discussion_topics():
                 FROM NEWS n
                 WHERE n.IS_FIRST = '0'
                 AND (
-                    n.COMMENTER = (SELECT NAME FROM STUDENT WHERE STU_NO = '%s')
+                    n.COMMENTER = (SELECT NAME FROM STUDENT WHERE STU_NO = %s)
                     OR n.NEWS_ID IN (
                         SELECT DISTINCT IS_FIRST FROM NEWS 
-                        WHERE COMMENTER = (SELECT NAME FROM STUDENT WHERE STU_NO = '%s')
+                        WHERE COMMENTER = (SELECT NAME FROM STUDENT WHERE STU_NO = %s)
                         AND IS_FIRST != '0'
                     )
                 )
-                %s
-            """ % (stu_no, stu_no, order_by)
+            """ 
+            sql += order_by
+            params = [stu_no, stu_no]
         else:
             # 基础查询
-            sql = """
+            sql_base = """
                 SELECT n.NEWS_ID, n.TOPIC, n.COMMENTS, n.COMMENTER, n.CREATE_TIME,
                        (SELECT COUNT(*) FROM NEWS WHERE IS_FIRST = n.NEWS_ID) as reply_count
                 FROM NEWS n
                 WHERE n.IS_FIRST = '0'
-                %s
-                %s
-            """ % (filter_condition, order_by)
+            """
+            
+            # 筛选条件
+            if filter_type == 'my_topics':
+                sql_base += " AND n.COMMENTER = (SELECT NAME FROM STUDENT WHERE STU_NO = %s)"
+                params.append(stu_no)
+            elif filter_type == 'hot':
+                sql_base += " AND (SELECT COUNT(*) FROM NEWS WHERE IS_FIRST = n.NEWS_ID) >= 5"
+            
+            sql = sql_base + order_by
         
         # 执行查询
-        all_topics = query.query(sql)
+        all_topics = query.query(sql, tuple(params) if params else None)
         
         # 分页
         total = len(all_topics)
@@ -1760,7 +1762,14 @@ def api_get_discussion_topics():
             if create_time:
                 try:
                     from datetime import datetime, timedelta
-                    create_dt = datetime.strptime(str(create_time), '%Y-%m-%d %H:%M:%S')
+                    # 处理可能的不同时间格式
+                    if hasattr(create_time, 'strftime'):
+                        create_dt = create_time
+                        create_time = create_time.strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        create_dt = datetime.strptime(str(create_time), '%Y-%m-%d %H:%M:%S')
+                        create_time = str(create_time)
+                        
                     if datetime.now() - create_dt < timedelta(days=1):
                         tags.append('最新')
                 except:
@@ -1769,19 +1778,16 @@ def api_get_discussion_topics():
             # 检查是否有教师回复（简化处理，假设教师名字包含"老师"）
             check_teacher_sql = """
                 SELECT COUNT(*) FROM NEWS 
-                WHERE IS_FIRST = '%s' 
+                WHERE IS_FIRST = %s
                 AND (COMMENTER LIKE '%%老师%%' OR COMMENTER LIKE '%%教授%%')
-            """ % news_id
-            teacher_replies = query.query(check_teacher_sql)
+            """
+            teacher_replies = query.query(check_teacher_sql, (news_id,))
             if teacher_replies and teacher_replies[0][0] > 0:
                 tags.append('教师回复')
             
             # 热门标签（回复数>=5）
             if reply_count >= 5:
                 tags.append('热门')
-            
-            # 置顶标签（简化处理，可以根据实际需求添加置顶字段）
-            # tags.append('置顶')  # 暂时不实现
             
             topics_list.append({
                 'news_id': news_id,
@@ -1801,7 +1807,7 @@ def api_get_discussion_topics():
                 "page": page,
                 "per_page": per_page,
                 "total": total,
-                "pages": (total + per_page - 1) // per_page
+                "pages": (total + per_page - 1) // per_page if total > 0 else 0
             }
         })
     except Exception as e:

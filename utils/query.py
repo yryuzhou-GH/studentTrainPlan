@@ -20,16 +20,16 @@ def insert(sql, params):
     conn.close()
 ###251217你们他妈别删我代码了
 
-def query(sql):
+def query(sql, params=None):
     """
     功能; 使用sql语句查询数据库中学生选课信息.
-    参数: sql(string)
+    参数: sql(string), params(tuple/list, optional)
     """
     db = _get_connection()
     cur = db.cursor()
     result = []
     try:
-        cur.execute(sql)
+        cur.execute(sql, params)
         result = cur.fetchall()
         db.commit()
 
@@ -44,15 +44,15 @@ def query(sql):
     return result
 
 
-def update(sql):
+def update(sql, params=None):
     """
     功能; 使用sql语句更新数据库中学生选课信息。
-    参数: sql(string)
+    参数: sql(string), params(tuple/list, optional)
     """
     db = _get_connection()
     cur = db.cursor()
     try:
-        cur.execute(sql)
+        cur.execute(sql, params)
         db.commit()
         #print('update success')
         # print('update success')
@@ -60,6 +60,8 @@ def update(sql):
         # print('update loss')
         print(f"数据库更新错误: {str(e)}")
         print(f"SQL语句: {sql}")
+        if params:
+            print(f"参数: {params}")
         db.rollback()
         raise  # 重新抛出异常，让调用者知道错误
     finally:
